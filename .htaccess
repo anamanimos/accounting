@@ -1,4 +1,5 @@
 RewriteEngine On
+RewriteBase /v/
 
 # Handle all requests
 RewriteCond %{REQUEST_FILENAME} !-f
