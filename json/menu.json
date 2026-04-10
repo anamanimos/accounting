@@ -1,0 +1,112 @@
+[
+  {
+    "type": "heading",
+    "title": "Menu Utama"
+  },
+  {
+    "type": "link",
+    "url": "home",
+    "title": "Beranda",
+    "icon": "ki-home-2",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "link",
+    "url": "users",
+    "title": "Users",
+    "icon": "ki-profile-user",
+    "levels": ["super admin"]
+  },
+  {
+    "type": "link",
+    "url": "rekening",
+    "title": "Rekening",
+    "icon": "ki-bank",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "link",
+    "url": "saldo_awal",
+    "title": "Saldo Awal",
+    "icon": "ki-wallet",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "link",
+    "url": "jurnal_umum",
+    "title": "Jurnal Umum",
+    "icon": "ki-book",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "link",
+    "url": "jurnal_umum/jurnal_auto",
+    "title": "Jurnal Auto Prompt",
+    "icon": "ki-message-text-2",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "link",
+    "url": "buku_besar",
+    "title": "Buku Besar",
+    "icon": "ki-document",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "link",
+    "url": "jurnal_penyesuaian",
+    "title": "Jurnal Penyesuaian",
+    "icon": "ki-setting-2",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "heading",
+    "title": "Laporan"
+  },
+  {
+    "type": "link",
+    "url": "lap_buku_besar",
+    "title": "Buku Besar",
+    "icon": "ki-document"
+  },
+  {
+    "type": "link",
+    "url": "lap_neraca_saldo",
+    "title": "Neraca Saldo",
+    "icon": "ki-document"
+  },
+  {
+    "type": "link",
+    "url": "lap_neraca_lajur",
+    "title": "Neraca Lajur",
+    "icon": "ki-document"
+  },
+  {
+    "type": "link",
+    "url": "lap_laba_rugi",
+    "title": "Laba Rugi",
+    "icon": "ki-document"
+  },
+  {
+    "type": "link",
+    "url": "lap_neraca",
+    "title": "Neraca",
+    "icon": "ki-document"
+  },
+  {
+    "type": "link",
+    "url": "closing",
+    "title": "Tutup Buku",
+    "icon": "ki-lock-2"
+  },
+  {
+    "type": "heading",
+    "title": "Grafik"
+  },
+  {
+    "type": "link",
+    "url": "grafik",
+    "title": "Grafik Jurnal",
+    "icon": "ki-chart-line"
+  }
+]

@@ -1,0 +1,46 @@
+/* Container tabel dengan tinggi tetap untuk vertical scroll */
+.table-responsive {
+    max-height: 600px; /* Sesuaikan tinggi sesuai kebutuhan */
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+/* Sticky all table headers */
+.table > thead > tr > th {
+    position: sticky;
+    top: 0; /* Kembali ke 0 karena scroll di dalam container */
+    z-index: 8;
+    background-color: #f5f8fa;
+}
+
+/* Sticky first column in table header - override dengan z-index lebih tinggi */
+.table > thead > tr > th:first-child {
+    position: sticky;
+    left: 0;
+    top: 0; /* Kembali ke 0 karena scroll di dalam container */
+    z-index: 11;
+    background-color: #f5f8fa; /* Sesuaikan dengan warna table-light */
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+}
+
+/* Sticky first column in table body */
+.table > tbody > tr > td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 9;
+    background-color: #ffffff;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+}
+
+/* Hover effect untuk row dengan sticky column */
+.table > tbody > tr:hover > td:first-child {
+    background-color: #f9fafb;
+}
+
+.table > thead:first-child > tr:first-child > th:nth-child(2) {
+    padding-left: 40px;
+}
+
+.table > tbody > tr > td:nth-child(2) {
+    padding-left: 50px !important;
+}

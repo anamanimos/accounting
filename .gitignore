@@ -1,0 +1,31 @@
+# CI 3 Standard Ignores
+/license.txt
+/user_guide/
+/.project
+
+# Environment Files
+.env
+.env.testing
+
+# Logs
+application/logs/*
+!application/logs/index.html
+!application/logs/.gitkeep
+
+# Cache
+application/cache/*
+!application/cache/index.html
+!application/cache/.gitkeep
+
+# Temporary/OS files
+.DS_Store
+Thumbs.db
+*.zip
+*.rar
+*.7z
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
