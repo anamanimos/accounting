@@ -157,11 +157,13 @@ class Webhook_wa extends CI_Controller {
             $prompt = $body;
         }
 
-        // Parse prompt menjadi transaksi
         $transactions = $this->_parse_prompt($prompt);
         if (empty($transactions)) {
             // Jangan balas jika bukan format jurnal agar grup tidak berisik
             file_put_contents(FCPATH.'wa.txt', "[DEBUG] Ignoring message because parsed transactions are empty. Prompt: $prompt\n", FILE_APPEND);
+            if (isset($payload['image'])) {
+                $this->_send_message($chat_id, "Maaf, AI gagal membaca format nota atau teks balasan terlalu pendek. Silakan coba foto nota yang lebih jelas.", $message_id);
+            }
             return $this->_response(['status' => 'ignored_not_prompt']);
         }
 
@@ -282,22 +284,26 @@ class Webhook_wa extends CI_Controller {
         $api_key = Env::get('GEMINI_API_KEY');
         if (empty($api_key)) return ['success' => false];
 
-        $system_instruction = "Anda adalah asisten akuntansi. Ekstrak data dari nota ini ke format teks baku.\n";
-        $system_instruction .= "ATURAN MUTLAK:\n";
-        $system_instruction .= "1. Baris pertama HANYA tanggal transaksi di nota (format DD - MM - YYYY).\n";
-        $system_instruction .= "2. Baris berikutnya daftar barang, format: \n[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga]\n";
-        $system_instruction .= "3. Abaikan total tagihan, dll. Hanya item.\n";
-        $system_instruction .= "4. [Deskripsi] diambil HANYA dari urutan teks berikut ini: " . $nama_order . "\n";
-        $system_instruction .= "5. Jika tidak ada Pelanggan, gunakan 'Sevencols'. Jika tidak ada ukuran, gunakan '1'.\n";
-        $system_instruction .= "6. Nominal uang HANYA angka utuh tanpa titik/koma (contoh: 90.000 HARUS ditulis 90000). AWAS: Jangan buang angka nol di belakang, karena titik pada nota Indonesia adalah ribuan, bukan desimal!\n";
-        $system_instruction .= "7. [Ukuran] diambil dari JUMLAH KUANTITAS barang di nota.\n";
-        $system_instruction .= "8. Jangan tambahkan markdown, hanya kembalikan teks hasil akhirnya saja.";
+        $prompt_instruction = "Tolong analisis gambar nota ini dan ekstrak transaksi-transaksinya menjadi format baris teks persis seperti ini:
+DD - MM - YYYY
+[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga]
+
+Aturannya:
+1. Baris pertama HANYA tanggal transaksi di nota (format DD - MM - YYYY).
+2. Baris kedua dan seterusnya adalah baris barang/transaksi.
+3. [Pelanggan] SELALU diisi dengan teks \"Sevencols\" secara hardcode.
+4. [Suplier] diambil dari nama toko yang ada di nota.
+5. [Deskripsi] diambil HANYA dari urutan teks berikut ini: \"" . $nama_order . "\". Jika ada banyak barang di nota, pisahkan teks \"" . $nama_order . "\" dengan koma (,) dan berikan deskripsi yang sesuai.
+6. [Ukuran] diambil dari JUMLAH KUANTITAS (Banyaknya/Qty) barang tersebut di nota.
+7. [Modal] diambil dari TOTAL HARGA (Subtotal barang tersebut) di nota.
+8. NOMINAL UANG [Modal] dan [Harga] HANYA BOLEH berupa angka utuh (contoh: 90.000 ditulis 90000). JANGAN buang angka nol di belakang, titik pada nota Indonesia adalah ribuan, BUKAN desimal!
+9. Jangan tambahkan markdown, hanya kembalikan teks hasil akhirnya saja.";
 
         $payload = [
             "contents" => [
                 [
                     "parts" => [
-                        ["text" => $system_instruction],
+                        ["text" => $prompt_instruction],
                         [
                             "inline_data" => [
                                 "mime_type" => "image/jpeg",
