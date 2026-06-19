@@ -72,7 +72,7 @@ class Jurnal_ocr extends CI_Controller {
         $base64_image = base64_encode(file_get_contents($_FILES['image']['tmp_name']));
 
         // Call Gemini API
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" . $api_key;
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" . $api_key;
         
         $prompt = "Tolong analisis gambar nota ini dan ekstrak transaksi-transaksinya menjadi format baris teks persis seperti ini:
 DD - MM - YYYY
