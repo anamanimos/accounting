@@ -47,6 +47,13 @@
   },
   {
     "type": "link",
+    "url": "jurnal_ocr",
+    "title": "Jurnal OCR (Nota AI)",
+    "icon": "ki-scan-barcode",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "link",
     "url": "master_harga",
     "title": "Master Harga Jual",
     "icon": "ki-tag",
