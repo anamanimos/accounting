@@ -161,6 +161,7 @@ class Webhook_wa extends CI_Controller {
         $transactions = $this->_parse_prompt($prompt);
         if (empty($transactions)) {
             // Jangan balas jika bukan format jurnal agar grup tidak berisik
+            file_put_contents(FCPATH.'wa.txt', "[DEBUG] Ignoring message because parsed transactions are empty. Prompt: $prompt\n", FILE_APPEND);
             return $this->_response(['status' => 'ignored_not_prompt']);
         }
 
@@ -329,8 +330,12 @@ class Webhook_wa extends CI_Controller {
                     $text = trim($res_json['candidates'][0]['content']['parts'][0]['text']);
                     $text = preg_replace('/```[a-z]*\n/i', '', $text);
                     $text = str_replace('```', '', $text);
+                    
+                    file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI] Raw Output: \n" . $text . "\n", FILE_APPEND);
                     return ['success' => true, 'text' => trim($text)];
                 }
+            } else {
+                file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] HTTP $http_code Response: $response\n", FILE_APPEND);
             }
         }
 
