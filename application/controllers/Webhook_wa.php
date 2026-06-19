@@ -68,8 +68,16 @@ class Webhook_wa extends CI_Controller {
 
         // Cek State Machine (YA / BATAL)
         $upper_body = strtoupper($body);
-        if ($replied_to_id && in_array($upper_body, ['YA', 'BATAL'])) {
-            $draft = $this->db->get_where('wa_draft_jurnal', ['message_id' => $replied_to_id, 'status' => 'pending'])->row();
+        if (in_array($upper_body, ['YA', 'BATAL'])) {
+            $draft = null;
+            if ($replied_to_id) {
+                $draft = $this->db->get_where('wa_draft_jurnal', ['message_id' => $replied_to_id, 'status' => 'pending'])->row();
+            }
+            // Jika tidak di-reply ATAU ID tidak ditemukan di DB (karena GOWA tidak return ID), ambil draf terakhir
+            if (!$draft) {
+                $draft = $this->db->order_by('id', 'DESC')->get_where('wa_draft_jurnal', ['status' => 'pending'])->row();
+            }
+
             if ($draft) {
                 if ($upper_body === 'BATAL') {
                     $this->db->update('wa_draft_jurnal', ['status' => 'rejected'], ['id' => $draft->id]);
@@ -160,18 +168,27 @@ class Webhook_wa extends CI_Controller {
         // Kirim draft ke grup
         $sent_msg = $this->_send_message($chat_id, $preview_msg, $message_id);
         
-        if ($sent_msg && isset($sent_msg['results']['message_id'])) {
-            $bot_msg_id = $sent_msg['results']['message_id'];
-            
-            // Simpan ke wa_draft_jurnal
-            $this->db->insert('wa_draft_jurnal', [
-                'message_id' => $bot_msg_id,
-                'sender_jid' => $sender_jid,
-                'payload_jurnal' => json_encode($jurnal_rows),
-                'status' => 'pending',
-                'created_at' => date('Y-m-d H:i:s')
-            ]);
+        $bot_msg_id = 'unknown_' . time() . '_' . rand(100, 999);
+        if ($sent_msg) {
+            if (isset($sent_msg['results']['message_id'])) {
+                $bot_msg_id = $sent_msg['results']['message_id'];
+            } elseif (isset($sent_msg['data']['id'])) {
+                $bot_msg_id = $sent_msg['data']['id'];
+            } elseif (isset($sent_msg['data']['message_id'])) {
+                $bot_msg_id = $sent_msg['data']['message_id'];
+            } elseif (isset($sent_msg['message_id'])) {
+                $bot_msg_id = $sent_msg['message_id'];
+            }
         }
+        
+        // Selalu simpan ke wa_draft_jurnal agar fitur YA/BATAL berfungsi dengan melihat draf terakhir
+        $this->db->insert('wa_draft_jurnal', [
+            'message_id' => $bot_msg_id,
+            'sender_jid' => $sender_jid,
+            'payload_jurnal' => json_encode($jurnal_rows),
+            'status' => 'pending',
+            'created_at' => date('Y-m-d H:i:s')
+        ]);
 
         return $this->_response(['status' => 'draft_created']);
     }
