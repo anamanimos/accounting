@@ -320,7 +320,16 @@ class Webhook_wa extends CI_Controller {
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 25); // Set timeout agar tidak mati oleh max_execution_time
             $response = curl_exec($ch);
+            
+            if (curl_errno($ch)) {
+                $error_msg = curl_error($ch);
+                file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] CURL Error ($model): $error_msg\n", FILE_APPEND);
+                curl_close($ch);
+                continue;
+            }
+            
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
 
@@ -333,6 +342,8 @@ class Webhook_wa extends CI_Controller {
                     
                     file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI] Raw Output: \n" . $text . "\n", FILE_APPEND);
                     return ['success' => true, 'text' => trim($text)];
+                } else {
+                    file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] Missing text in 200 OK Response: $response\n", FILE_APPEND);
                 }
             } else {
                 file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] HTTP $http_code Response: $response\n", FILE_APPEND);
