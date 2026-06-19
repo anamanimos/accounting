@@ -184,12 +184,13 @@ class Jurnal_umum extends CI_Controller {
 					
 					// Jika harga jual tidak diinput manual
 					if ($harga_jual === 0) {
-						$mh = $this->db->query("SELECT harga_jual FROM master_harga WHERE deskripsi = ?", [$deskripsi])->row();
+						// Karena produk hanya 1, langsung ambil harga dari master_harga tanpa mencocokkan deskripsi
+						$mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
 						
 						if (!$mh) {
 							return $this->output->set_content_type('application/json')
 								->set_status_header(400)
-								->set_output(json_encode(['status' => 'error', 'message' => "Harga untuk deskripsi '$deskripsi' tidak ditemukan di Master Harga."]));
+								->set_output(json_encode(['status' => 'error', 'message' => "Harga belum disetel di Master Harga."]));
 						}
 						
 						$harga_per_cm = $mh->harga_jual;
