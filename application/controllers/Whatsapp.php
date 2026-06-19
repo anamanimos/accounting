@@ -47,17 +47,21 @@ class Whatsapp extends CI_Controller {
             }
         }
 
-        $data = [
+        $d = [
             'status' => $status,
             'qrData' => $qrData,
             'jid' => $jid,
-            'device_id' => $device_id
+            'device_id' => $device_id,
+            'title' => 'Manajemen WhatsApp',
+            'content' => 'whatsapp/index',
+            'user' => (object) [
+				'nama_lengkap' => $this->session->userdata('nama_lengkap'),
+				'level'        => $this->session->userdata('level'),
+				'email'        => $this->session->userdata('username') . '@accounting.test'
+			]
         ];
 
-        $this->load->view('templates/header');
-        $this->load->view('templates/menu_kiri');
-        $this->load->view('whatsapp/index', $data);
-        $this->load->view('templates/footer');
+        $this->load->view('templates/main', $d);
     }
 
     private function _curl_get($url, $username, $password, $device_id)
