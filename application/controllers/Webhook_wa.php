@@ -419,19 +419,31 @@ Aturannya:
             $harga_jual = $trx['harga_jual'];
             $rek_inventory_or_ap = $trx['rek_inventory_or_ap'];
             
-            // HPP (511) bertambah di Debit
+            // Baris 1: Pendapatan (411) Kredit harga_jual
             $rows[] = [
                 'tgl_jurnal' => $trx['tgl'],
                 'ket' => $trx['ket'],
-                'no_rek' => '511',
-                'debet' => $modal,
+                'no_rek' => '411',
+                'debet' => 0,
+                'kredit' => $harga_jual,
+                'no_jurnal' => str_pad($no_jurnal, 6, "0", STR_PAD_LEFT),
+                'no_bukti' => str_pad($no_bukti, 6, "0", STR_PAD_LEFT),
+                'username' => 'WA Bot',
+                'tgl_insert' => $tgl_insert
+            ];
+            // Baris 2: Piutang (112) Debit harga_jual
+            $rows[] = [
+                'tgl_jurnal' => $trx['tgl'],
+                'ket' => $trx['ket'],
+                'no_rek' => '112',
+                'debet' => $harga_jual,
                 'kredit' => 0,
                 'no_jurnal' => str_pad($no_jurnal, 6, "0", STR_PAD_LEFT),
                 'no_bukti' => str_pad($no_bukti, 6, "0", STR_PAD_LEFT),
                 'username' => 'WA Bot',
                 'tgl_insert' => $tgl_insert
             ];
-            // Inventory/Hutang berkurang di Kredit
+            // Baris 3: Hutang/Kas (213/118) Kredit modal
             $rows[] = [
                 'tgl_jurnal' => $trx['tgl'],
                 'ket' => $trx['ket'],
@@ -443,25 +455,13 @@ Aturannya:
                 'username' => 'WA Bot',
                 'tgl_insert' => $tgl_insert
             ];
-            // Kas/Piutang bertambah di Debit (Pendapatan)
+            // Baris 4: HPP (516) Debit modal
             $rows[] = [
                 'tgl_jurnal' => $trx['tgl'],
                 'ket' => $trx['ket'],
-                'no_rek' => '118',
-                'debet' => $harga_jual,
+                'no_rek' => '516',
+                'debet' => $modal,
                 'kredit' => 0,
-                'no_jurnal' => str_pad($no_jurnal, 6, "0", STR_PAD_LEFT),
-                'no_bukti' => str_pad($no_bukti, 6, "0", STR_PAD_LEFT),
-                'username' => 'WA Bot',
-                'tgl_insert' => $tgl_insert
-            ];
-            // Penjualan bertambah di Kredit
-            $rows[] = [
-                'tgl_jurnal' => $trx['tgl'],
-                'ket' => $trx['ket'],
-                'no_rek' => '411',
-                'debet' => 0,
-                'kredit' => $harga_jual,
                 'no_jurnal' => str_pad($no_jurnal, 6, "0", STR_PAD_LEFT),
                 'no_bukti' => str_pad($no_bukti, 6, "0", STR_PAD_LEFT),
                 'username' => 'WA Bot',
