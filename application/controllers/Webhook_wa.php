@@ -14,6 +14,21 @@ class Webhook_wa extends CI_Controller {
         $raw_input = file_get_contents('php://input');
         $method = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
         
+        // Jika data bisa di-decode (JSON valid)
+        $data = json_decode($raw_input, true);
+        if ($data) {
+            $incoming_device_id = $data['device_id'] ?? '';
+            
+            // Karena WA Gateway dipakai bersama dengan Hacktani, filter device_id!
+            // Abaikan jika bukan dari device kita
+            if (strpos($incoming_device_id, 'erp-damaijaya') === false) {
+                return $this->output
+                    ->set_content_type('application/json')
+                    ->set_status_header(200)
+                    ->set_output(json_encode(['status' => 'ignored_other_device']));
+            }
+        }
+        
         // Simpan ke wa.txt di root directory untuk keperluan debug & mencari ID Grup
         $log_file = FCPATH . 'wa.txt';
         $time = date('Y-m-d H:i:s');
