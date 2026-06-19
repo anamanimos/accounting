@@ -13,6 +13,17 @@ class Webhook_wa extends CI_Controller {
         // Tangkap raw data JSON dari webhook
         $raw_input = file_get_contents('php://input');
         $method = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
+
+        // Simpan ke wa.txt di root directory untuk keperluan debug & mencari ID Grup
+        $log_file = FCPATH . 'wa.txt';
+        $time = date('Y-m-d H:i:s');
+        
+        $log_content = "=== WEBHOOK RECEIVED AT " . $time . " ===\n";
+        $log_content .= "Method: " . $method . "\n";
+        $log_content .= "Headers: " . json_encode(getallheaders()) . "\n";
+        $log_content .= "Payload: " . $raw_input . "\n\n";
+        
+        file_put_contents($log_file, $log_content, FILE_APPEND);
         
         // Jika data bisa di-decode (JSON valid)
         $data = json_decode($raw_input, true);
@@ -28,17 +39,6 @@ class Webhook_wa extends CI_Controller {
                     ->set_output(json_encode(['status' => 'ignored_other_device']));
             }
         }
-        
-        // Simpan ke wa.txt di root directory untuk keperluan debug & mencari ID Grup
-        $log_file = FCPATH . 'wa.txt';
-        $time = date('Y-m-d H:i:s');
-        
-        $log_content = "=== WEBHOOK RECEIVED AT " . $time . " ===\n";
-        $log_content .= "Method: " . $method . "\n";
-        $log_content .= "Headers: " . json_encode(getallheaders()) . "\n";
-        $log_content .= "Payload: " . $raw_input . "\n\n";
-        
-        file_put_contents($log_file, $log_content, FILE_APPEND);
 
         // Response 200 OK ke WA Gateway
         return $this->output
