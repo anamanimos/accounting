@@ -39,6 +39,29 @@ class Closing extends CI_Controller {
         $current_year = date('Y');
         $d['list_tahun'] = range($current_year - 5, $current_year + 1);
 
+        // Ambil sisa penyusutan Printer bulan sebelumnya
+        $last_print = $this->db->query("SELECT ket FROM jurnal_umum WHERE ket LIKE 'Tutup Bulan: Penyusutan Printer%(Sisa:%' ORDER BY tgl_jurnal DESC LIMIT 1")->row();
+        $sisa_print = 0;
+        if ($last_print) {
+            if (preg_match('/\(Sisa:(\d+)x\)/', $last_print->ket, $matches)) {
+                $sisa_print = (int)$matches[1] - 1;
+                if ($sisa_print < 0) $sisa_print = 0;
+            }
+        }
+
+        // Ambil sisa penyusutan Oven bulan sebelumnya
+        $last_oven = $this->db->query("SELECT ket FROM jurnal_umum WHERE ket LIKE 'Tutup Bulan: Penyusutan Oven%(Sisa:%' ORDER BY tgl_jurnal DESC LIMIT 1")->row();
+        $sisa_oven = 0;
+        if ($last_oven) {
+            if (preg_match('/\(Sisa:(\d+)x\)/', $last_oven->ket, $matches)) {
+                $sisa_oven = (int)$matches[1] - 1;
+                if ($sisa_oven < 0) $sisa_oven = 0;
+            }
+        }
+
+        $d['default_sisa_print'] = $sisa_print;
+        $d['default_sisa_oven'] = $sisa_oven;
+
         $d['content'] = 'closing/index';
         $this->load->view('templates/main', $d);
     }

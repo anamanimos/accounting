@@ -72,13 +72,13 @@
                                 </div>
                                 <div class="mb-5">
                                     <label class="form-label">Sisa Bulan Penyusutan Printer</label>
-                                    <input type="number" name="sisa_print" class="form-control form-control-solid" value="0" min="0" required>
-                                    <div class="text-muted fs-7 mt-1">Isi dengan 0 jika tidak ada sisa penyusutan.</div>
+                                    <input type="number" name="sisa_print" class="form-control form-control-solid" value="<?= isset($default_sisa_print) ? $default_sisa_print : 0 ?>" min="0" required>
+                                    <div class="text-muted fs-7 mt-1">Otomatis berkurang 1 dari bulan sebelumnya. Isi dengan 0 jika tidak ada sisa penyusutan.</div>
                                 </div>
                                 <div class="mb-5">
                                     <label class="form-label">Sisa Bulan Penyusutan Oven</label>
-                                    <input type="number" name="sisa_oven" class="form-control form-control-solid" value="0" min="0" required>
-                                    <div class="text-muted fs-7 mt-1">Isi dengan 0 jika tidak ada sisa penyusutan.</div>
+                                    <input type="number" name="sisa_oven" class="form-control form-control-solid" value="<?= isset($default_sisa_oven) ? $default_sisa_oven : 0 ?>" min="0" required>
+                                    <div class="text-muted fs-7 mt-1">Otomatis berkurang 1 dari bulan sebelumnya. Isi dengan 0 jika tidak ada sisa penyusutan.</div>
                                 </div>
                                 <button type="submit" class="btn btn-primary btn-tutup-bulan">
                                     <i class="ki-outline ki-lock fs-5"></i> Tutup Bulan
