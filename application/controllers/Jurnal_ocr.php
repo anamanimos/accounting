@@ -71,9 +71,6 @@ class Jurnal_ocr extends CI_Controller {
 
         $base64_image = base64_encode(file_get_contents($_FILES['image']['tmp_name']));
 
-        // Call Gemini API
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" . $api_key;
-        
         $prompt = "Tolong analisis gambar nota ini dan ekstrak transaksi-transaksinya menjadi format baris teks persis seperti ini:
 DD - MM - YYYY
 [Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]
@@ -108,23 +105,42 @@ Aturannya:
             ]
         ];
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For local env if ssl issues
+        $models_to_try = [
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
+            'gemini-2.0-flash',
+            'gemini-flash-latest'
+        ];
 
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $http_code = 0;
+        $response = '';
+
+        foreach ($models_to_try as $model) {
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $api_key;
+            
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            // Jika sukses, break dari loop
+            if ($http_code === 200) {
+                break;
+            }
+        }
 
         if ($http_code !== 200) {
             return $this->output->set_content_type('application/json')
                 ->set_status_header(500)
                 ->set_output(json_encode([
                     'status' => 'error', 
-                    'message' => 'Gagal menghubungi API Gemini. HTTP Code: ' . $http_code,
+                    'message' => 'Gagal menghubungi API Gemini walau sudah mencoba berbagai versi model. HTTP Code: ' . $http_code,
                     'debug' => $response
                 ]));
         }
