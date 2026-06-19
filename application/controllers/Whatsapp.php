@@ -16,10 +16,14 @@ class Whatsapp extends CI_Controller {
         $qrData = null;
         $jid = null;
 
-        $gateway_url = env('WA_GATEWAY_URL', 'https://wag.anam.ch');
-        $username = env('WA_GATEWAY_USERNAME', 'admin');
-        $password = env('WA_GATEWAY_PASSWORD', 'admin');
-        $device_id = env('WA_DEVICE_ID', 'erp-damaijaya');
+        if (!class_exists('Env') && file_exists(FCPATH . 'application/config/env.php')) {
+            require_once FCPATH . 'application/config/env.php';
+        }
+
+        $gateway_url = class_exists('Env') ? (Env::get('WA_GATEWAY_URL') ?: 'https://wag.anam.ch') : 'https://wag.anam.ch';
+        $username = class_exists('Env') ? (Env::get('WA_GATEWAY_USERNAME') ?: 'admin') : 'admin';
+        $password = class_exists('Env') ? (Env::get('WA_GATEWAY_PASSWORD') ?: 'admin') : 'admin';
+        $device_id = class_exists('Env') ? (Env::get('WA_DEVICE_ID') ?: 'erp-damaijaya') : 'erp-damaijaya';
 
         // Check status
         $statusData = $this->_curl_get($gateway_url . '/app/status', $username, $password, $device_id);
