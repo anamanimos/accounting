@@ -281,25 +281,22 @@ class Webhook_wa extends CI_Controller {
         $api_key = Env::get('GEMINI_API_KEY');
         if (empty($api_key)) return ['success' => false];
 
-        $prompt = "Tolong analisis gambar nota ini dan ekstrak transaksi-transaksinya menjadi format baris teks persis seperti ini:
-DD - MM - YYYY
-[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]
-
-Aturannya:
-1. Baris pertama HANYA tanggal transaksi di nota (format DD - MM - YYYY).
-2. Baris kedua dan seterusnya adalah baris barang/transaksi.
-3. [Pelanggan] SELALU diisi dengan teks \"Sevencols\" secara hardcode.
-4. [Suplier] diambil dari nama toko yang ada di nota.
-5. [Deskripsi] diambil HANYA dari urutan teks berikut ini: \"" . $nama_order . "\". Jika ada banyak barang di nota, pisahkan teks \"" . $nama_order . "\" dengan koma (,) dan berikan deskripsi yang sesuai untuk setiap baris.
-6. [Ukuran] diambil dari JUMLAH KUANTITAS (Banyaknya/Qty) barang tersebut di nota.
-7. [Modal] diambil dari TOTAL HARGA (Subtotal barang tersebut) di nota.
-8. Jangan tambahkan markdown, hanya kembalikan teks hasil akhirnya saja.";
+        $system_instruction = "Anda adalah asisten akuntansi. Ekstrak data dari nota ini ke format teks baku.\n";
+        $system_instruction .= "ATURAN MUTLAK:\n";
+        $system_instruction .= "1. Baris pertama HANYA tanggal transaksi di nota (format DD - MM - YYYY).\n";
+        $system_instruction .= "2. Baris berikutnya daftar barang, format: \n[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga]\n";
+        $system_instruction .= "3. Abaikan total tagihan, dll. Hanya item.\n";
+        $system_instruction .= "4. [Deskripsi] diambil HANYA dari urutan teks berikut ini: " . $nama_order . "\n";
+        $system_instruction .= "5. Jika tidak ada Pelanggan, gunakan 'Sevencols'. Jika tidak ada ukuran, gunakan '1'.\n";
+        $system_instruction .= "6. Nominal uang HANYA angka utuh tanpa titik/koma (contoh: 90.000 HARUS ditulis 90000). AWAS: Jangan buang angka nol di belakang, karena titik pada nota Indonesia adalah ribuan, bukan desimal!\n";
+        $system_instruction .= "7. [Ukuran] diambil dari JUMLAH KUANTITAS barang di nota.\n";
+        $system_instruction .= "8. Jangan tambahkan markdown, hanya kembalikan teks hasil akhirnya saja.";
 
         $payload = [
             "contents" => [
                 [
                     "parts" => [
-                        ["text" => $prompt],
+                        ["text" => $system_instruction],
                         [
                             "inline_data" => [
                                 "mime_type" => "image/jpeg",
