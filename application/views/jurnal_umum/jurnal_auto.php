@@ -41,7 +41,7 @@
                             </div>
                             <ul class="text-gray-700 fs-6 lh-lg mb-5" style="list-style-type: none; padding-left: 0;">
                                 <li><code class="bg-light p-1 rounded text-primary">DD - MM - YYYY</code> <br><span class="text-muted fs-7">Tanggal transaksi (baris pertama)</span></li>
-                                <li class="mt-3"><code class="bg-light p-1 rounded text-success">[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga Jual]</code><br><span class="text-muted fs-7">Baris transaksi &rarr; otomatis 4 jurnal</span></li>
+                                <li class="mt-3"><code class="bg-light p-1 rounded text-success">[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga Jual]</code><br><span class="text-muted fs-7">Baris transaksi &rarr; otomatis 4 jurnal. <b>Note:</b> <code>|[Harga Jual]</code> bersifat opsional. Jika dikosongkan, sistem akan mengalikan harga di Master Harga dengan ukuran.</span></li>
                             </ul>
                             
                             <div class="separator mb-5"></div>
@@ -56,8 +56,8 @@
                             
                             <h5 class="text-gray-900 fw-bold mb-3">Contoh:</h5>
                             <div class="bg-light rounded p-4 text-gray-600 font-monospace fs-7" style="white-space: pre-wrap;">18 - 09 - 2025
-Sevencols - Luar(P.Riyadi) - DTF KBKA TAZZAKA-18-9-25 - A4 - 10000|10000
-Budi - TokoABC - Baju Merah - L - 5000|8000</div>
+Sevencols - Luar(P.Riyadi) - DTF KBKA TAZZAKA-18-9-25 - A4 - 10000|15000
+Budi - TokoABC - DTF - 58x100cm - 5000  (Tanpa Harga Jual, dihitung otomatis)</div>
                         </div>
                     </div>
                 </div>

@@ -47,6 +47,13 @@
   },
   {
     "type": "link",
+    "url": "master_harga",
+    "title": "Master Harga Jual",
+    "icon": "ki-tag",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "link",
     "url": "buku_besar",
     "title": "Buku Besar",
     "icon": "ki-document",
