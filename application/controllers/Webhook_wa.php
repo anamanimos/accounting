@@ -69,36 +69,54 @@ class Webhook_wa extends CI_Controller {
         // Cek State Machine (YA / BATAL)
         $upper_body = strtoupper($body);
         if (in_array($upper_body, ['YA', 'BATAL'])) {
+            file_put_contents(FCPATH.'wa.txt', "[DEBUG] Detected YA/BATAL. upper_body: $upper_body, replied_to_id: " . ($replied_to_id ?: 'null') . "\n", FILE_APPEND);
+            
             $draft = null;
             if ($replied_to_id) {
                 $draft = $this->db->get_where('wa_draft_jurnal', ['message_id' => $replied_to_id, 'status' => 'pending'])->row();
             }
             // Jika tidak di-reply ATAU ID tidak ditemukan di DB (karena GOWA tidak return ID), ambil draf terakhir
             if (!$draft) {
+                file_put_contents(FCPATH.'wa.txt', "[DEBUG] Draft not found by replied_to_id, falling back to DESC\n", FILE_APPEND);
                 $draft = $this->db->order_by('id', 'DESC')->get_where('wa_draft_jurnal', ['status' => 'pending'])->row();
             }
 
             if ($draft) {
+                file_put_contents(FCPATH.'wa.txt', "[DEBUG] Found pending draft ID: {$draft->id}. Processing...\n", FILE_APPEND);
+                
                 if ($upper_body === 'BATAL') {
                     $this->db->update('wa_draft_jurnal', ['status' => 'rejected'], ['id' => $draft->id]);
                     $this->_send_message($chat_id, "Draf jurnal telah dibatalkan.", $message_id);
                 } else {
                     // YA: Simpan ke database
                     $jurnal_data = json_decode($draft->payload_jurnal, true);
+                    file_put_contents(FCPATH.'wa.txt', "[DEBUG] Starting DB transaction with payload: " . json_encode($jurnal_data) . "\n", FILE_APPEND);
+                    
+                    // Matikan db_debug agar script tidak mati tiba-tiba jika ada error SQL
+                    $this->db->db_debug = FALSE;
                     $this->db->trans_start();
+                    
                     foreach ($jurnal_data as $row) {
-                        $this->db->insert('jurnal_umum', $row);
+                        if (!$this->db->insert('jurnal_umum', $row)) {
+                            file_put_contents(FCPATH.'wa.txt', "[DEBUG DB ERROR] " . json_encode($this->db->error()) . "\n", FILE_APPEND);
+                        }
                     }
                     $this->db->trans_complete();
+                    $trans_status = $this->db->trans_status();
+                    $this->db->db_debug = TRUE; // Kembalikan ke normal
 
-                    if ($this->db->trans_status() === FALSE) {
-                        $this->_send_message($chat_id, "Gagal menyimpan jurnal ke database.", $message_id);
+                    file_put_contents(FCPATH.'wa.txt', "[DEBUG] DB transaction complete. Status: " . ($trans_status === FALSE ? 'FAILED' : 'SUCCESS') . "\n", FILE_APPEND);
+
+                    if ($trans_status === FALSE) {
+                        $this->_send_message($chat_id, "Gagal menyimpan jurnal ke database. Mohon cek log server.", $message_id);
                     } else {
                         $this->db->update('wa_draft_jurnal', ['status' => 'approved'], ['id' => $draft->id]);
                         $this->_send_message($chat_id, "✅ Jurnal berhasil disimpan!", $message_id);
                     }
                 }
                 return $this->_response(['status' => 'state_processed']);
+            } else {
+                file_put_contents(FCPATH.'wa.txt', "[DEBUG] NO PENDING DRAFT FOUND AT ALL!\n", FILE_APPEND);
             }
         }
 
