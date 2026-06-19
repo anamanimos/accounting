@@ -115,6 +115,17 @@
   },
   {
     "type": "heading",
+    "title": "Pengaturan"
+  },
+  {
+    "type": "link",
+    "url": "whatsapp",
+    "title": "WhatsApp Gateway",
+    "icon": "ki-whatsapp",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "heading",
     "title": "Grafik"
   },
   {
