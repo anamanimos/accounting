@@ -296,7 +296,7 @@ Aturannya:
 5. [Deskripsi] diambil HANYA dari urutan teks berikut ini: \"" . $nama_order . "\". Jika ada banyak barang di nota, pisahkan teks \"" . $nama_order . "\" dengan koma (,) dan berikan deskripsi yang sesuai.
 6. [Ukuran] diambil dari JUMLAH KUANTITAS (Banyaknya/Qty) barang tersebut di nota.
 7. [Modal] diambil dari TOTAL HARGA (Subtotal barang tersebut) di nota.
-8. NOMINAL UANG [Modal] dan [Harga] HANYA BOLEH berupa angka utuh (contoh: 90.000 ditulis 90000). JANGAN buang angka nol di belakang, titik pada nota Indonesia adalah ribuan, BUKAN desimal!
+8. PENTING: [Modal] dan [Harga] WAJIB diisi! Tulis angkanya TANPA titik/koma (contoh: Rp 90.000 wajib ditulis 90000). Jangan potong angka nol-nya.
 9. Jangan tambahkan markdown, hanya kembalikan teks hasil akhirnya saja.";
 
         $payload = [
