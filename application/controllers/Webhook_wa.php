@@ -14,6 +14,10 @@ class Webhook_wa extends CI_Controller {
 
     public function index()
     {
+        // Mencegah script mati jika gateway WA timeout karena Gemini butuh waktu lama
+        ignore_user_abort(true);
+        set_time_limit(120); // Beri waktu ekstra untuk proses Gemini
+
         $raw_input = file_get_contents('php://input');
         $method = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
 
@@ -53,14 +57,6 @@ class Webhook_wa extends CI_Controller {
             return $this->_response(['status' => 'ignored_from_me']);
         }
 
-        $chat_id = $payload['chat_id'] ?? '';
-        $target_group = Env::get('WA_GROUP_ID') ?: '120363426581172416@g.us';
-
-        // Hanya proses pesan dari grup target
-        if ($chat_id !== $target_group) {
-            return $this->_response(['status' => 'ignored_wrong_group']);
-        }
-
         $message_id = $payload['id'] ?? '';
         
         // Idempotency check (mencegah proses berulang jika gateway mengirim ulang webhook)
@@ -70,6 +66,14 @@ class Webhook_wa extends CI_Controller {
                 return $this->_response(['status' => 'already_processed']);
             }
             file_put_contents($cache_file, date('Y-m-d H:i:s'));
+        }
+
+        $chat_id = $payload['chat_id'] ?? '';
+        $target_group = Env::get('WA_GROUP_ID') ?: '120363426581172416@g.us';
+
+        // Hanya proses pesan dari grup target
+        if ($chat_id !== $target_group) {
+            return $this->_response(['status' => 'ignored_wrong_group']);
         }
 
         $body = trim($payload['body'] ?? '');
@@ -188,14 +192,18 @@ class Webhook_wa extends CI_Controller {
                 $is_processing_image = true;
                 $image_path_to_process = $pending->image_url;
                 $nama_order_to_process = $body;
-                
-                $this->_send_message($chat_id, "Memproses gambar dengan nama order: *" . $body . "*...", $message_id);
             } else {
                 $prompt = $body;
             }
         }
 
         if ($is_processing_image) {
+            $this->_send_message($chat_id, "Memproses gambar dengan nama order: *" . $nama_order_to_process . "*...", $message_id);
+            
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
+
             $gateway_url = rtrim(Env::get('WA_GATEWAY_URL') ?: 'https://wag.anam.ch', '/');
             $image_url = (strpos($image_path_to_process, 'http') === 0) ? $image_path_to_process : $gateway_url . '/' . $image_path_to_process;
             
