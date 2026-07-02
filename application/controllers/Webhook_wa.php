@@ -145,12 +145,16 @@ class Webhook_wa extends CI_Controller {
             }
 
             // Kirim ke Gemini
-            $gemini_result = $this->_process_gemini_vision($base64_image, $nama_order);
+            $this->load->library('gemini_ocr');
+            $gemini_result = $this->gemini_ocr->process_receipt($base64_image, $nama_order);
+            
             if (!$gemini_result['success']) {
+                file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] " . $gemini_result['error'] . "\n", FILE_APPEND);
                 $this->_send_message($chat_id, "Gagal: Layanan AI sedang bermasalah / sibuk.", $message_id);
                 return $this->_response(['status' => 'gemini_error']);
             }
 
+            file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI] Raw Output: \n" . $gemini_result['text'] . "\n", FILE_APPEND);
             $prompt = $gemini_result['text'];
         } else {
             // Teks biasa
@@ -279,85 +283,7 @@ class Webhook_wa extends CI_Controller {
         return false;
     }
 
-    private function _process_gemini_vision($base64_image, $nama_order)
-    {
-        $api_key = Env::get('GEMINI_API_KEY');
-        if (empty($api_key)) return ['success' => false];
 
-        $prompt_instruction = "Tolong analisis gambar nota ini dan ekstrak transaksi-transaksinya menjadi format baris teks persis seperti ini:
-DD - MM - YYYY
-[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga]
-
-Aturannya:
-1. Baris pertama HANYA tanggal transaksi di nota (format DD - MM - YYYY).
-2. Baris kedua dan seterusnya adalah baris barang/transaksi.
-3. [Pelanggan] SELALU diisi dengan teks \"Sevencols\" secara hardcode.
-4. [Suplier] diambil dari nama toko yang ada di nota.
-5. [Deskripsi] diambil HANYA dari urutan teks berikut ini: \"" . $nama_order . "\". Jika ada banyak barang di nota, pisahkan teks \"" . $nama_order . "\" dengan koma (,) dan berikan deskripsi yang sesuai.
-6. [Ukuran] diambil dari JUMLAH KUANTITAS (Banyaknya/Qty) barang tersebut di nota.
-7. [Modal] diambil dari TOTAL HARGA (Subtotal barang tersebut) di nota.
-8. PENTING: [Modal] dan [Harga] WAJIB diisi! Tulis angkanya TANPA titik/koma (contoh: Rp 90.000 wajib ditulis 90000). Jangan potong angka nol-nya.
-9. Jangan tambahkan markdown, hanya kembalikan teks hasil akhirnya saja.";
-
-        $payload = [
-            "contents" => [
-                [
-                    "parts" => [
-                        ["text" => $prompt_instruction],
-                        [
-                            "inline_data" => [
-                                "mime_type" => "image/jpeg",
-                                "data" => $base64_image
-                            ]
-                        ]
-                    ]
-                ]
-            ],
-            "generationConfig" => ["temperature" => 0.1, "maxOutputTokens" => 800]
-        ];
-
-        $models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-flash-latest'];
-        
-        foreach ($models as $model) {
-            $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $api_key;
-            $ch = curl_init($url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 25); // Set timeout agar tidak mati oleh max_execution_time
-            $response = curl_exec($ch);
-            
-            if (curl_errno($ch)) {
-                $error_msg = curl_error($ch);
-                file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] CURL Error ($model): $error_msg\n", FILE_APPEND);
-                curl_close($ch);
-                continue;
-            }
-            
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($http_code === 200) {
-                $res_json = json_decode($response, true);
-                if (isset($res_json['candidates'][0]['content']['parts'][0]['text'])) {
-                    $text = trim($res_json['candidates'][0]['content']['parts'][0]['text']);
-                    $text = preg_replace('/```[a-z]*\n/i', '', $text);
-                    $text = str_replace('```', '', $text);
-                    
-                    file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI] Raw Output: \n" . $text . "\n", FILE_APPEND);
-                    return ['success' => true, 'text' => trim($text)];
-                } else {
-                    file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] Missing text in 200 OK Response: $response\n", FILE_APPEND);
-                }
-            } else {
-                file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] HTTP $http_code Response: $response\n", FILE_APPEND);
-            }
-        }
-
-        return ['success' => false];
-    }
 
     private function _parse_prompt($prompt)
     {
