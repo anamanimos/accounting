@@ -29,9 +29,9 @@ Aturannya:
 3. [Pelanggan] SELALU diisi dengan teks \"Sevencols\" secara hardcode.
 4. [Suplier] diambil dari nama toko yang ada di nota (misal HiATA Clothing).
 5. [Deskripsi] diambil dari teks caption ini: \"" . $nama_order . "\". Jika nota memiliki beberapa barang, bagi teks caption tersebut secara logis (misalnya memisahkan kata 'dan', koma, atau spasi) untuk masing-masing baris barang. Jika tidak bisa dibagi, gunakan teks caption utuh untuk semua baris.
-6. [Ukuran] diambil dari JUMLAH KUANTITAS (Banyaknya/Qty) barang tersebut di nota.
-7. [Modal] diambil dari TOTAL HARGA (Subtotal) untuk baris barang tersebut, BUKAN harga satuannya.
-8. PENTING: [Modal] WAJIB diisi berupa angka bulat TANPA titik/koma (contoh: Rp 45.300 wajib ditulis 45300). Jangan buang angka nol-nya.
+6. [Ukuran] diambil dari kuantitas/qty (Banyak) barang tersebut di nota.
+7. [Modal] WAJIB DIISI! Diambil dari nominal di kolom 'Jumlah' atau total harga khusus untuk baris barang tersebut, BUKAN harga satuannya.
+8. [Modal] WAJIB ditulis angka bulat TANPA awalan Rp dan TANPA titik/koma (contoh: Rp 57.000 WAJIB ditulis 57000). Jangan potong angka nol-nya.
 9. Jangan tambahkan penjelasan, header tabel, markdown, awalan, atau akhiran apapun. Hanya kembalikan teks murni hasil akhirnya saja.";
 
         $payload = [
