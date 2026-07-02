@@ -19,20 +19,20 @@ class Gemini_ocr {
             return ['success' => false, 'error' => 'Gemini API Key belum disetel di file .env.'];
         }
 
-        $prompt = "Tolong analisis gambar nota ini dan ekstrak transaksi-transaksinya menjadi format baris teks persis seperti ini:
+        $prompt = "Tolong analisis gambar nota ini dan ekstrak SEMUA transaksi/barang menjadi format baris teks persis seperti ini:
 DD - MM - YYYY
 [Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]
 
 Aturannya:
 1. Baris pertama HANYA tanggal transaksi di nota (format DD - MM - YYYY).
-2. Baris kedua dan seterusnya adalah baris barang/transaksi.
+2. EKSTRAK SEMUA BARANG DI NOTA. Setiap 1 macam barang di nota WAJIB ditulis menjadi 1 baris baru dengan format di atas. (Jika ada 5 barang, maka akan ada 5 baris).
 3. [Pelanggan] SELALU diisi dengan teks \"Sevencols\" secara hardcode.
 4. [Suplier] diambil dari nama toko yang ada di nota (misal HiATA Clothing).
-5. [Deskripsi] diambil HANYA dari urutan teks berikut ini: \"" . $nama_order . "\". Jika ada banyak barang di nota, pisahkan teks \"" . $nama_order . "\" dengan koma (,) dan berikan deskripsi yang sesuai untuk setiap baris barang secara berurutan. Misalnya jika input adalah \"Order A, Order B\" dan ada 2 barang di nota, maka barang 1 deskripsinya \"Order A\" dan barang 2 deskripsinya \"Order B\".
+5. [Deskripsi] diambil dari teks caption ini: \"" . $nama_order . "\". Jika nota memiliki beberapa barang, bagi teks caption tersebut secara logis (misalnya memisahkan kata 'dan', koma, atau spasi) untuk masing-masing baris barang. Jika tidak bisa dibagi, gunakan teks caption utuh untuk semua baris.
 6. [Ukuran] diambil dari JUMLAH KUANTITAS (Banyaknya/Qty) barang tersebut di nota.
-7. [Modal] diambil dari TOTAL HARGA (Subtotal barang tersebut) di nota, BUKAN harga satuannya.
-8. PENTING: [Modal] WAJIB diisi! Tulis angkanya TANPA titik/koma (contoh: Rp 90.000 wajib ditulis 90000). Jangan potong angka nol-nya.
-9. Jangan tambahkan penjelasan, markdown, awalan, atau akhiran apapun. Hanya kembalikan teks hasil akhirnya saja.";
+7. [Modal] diambil dari TOTAL HARGA (Subtotal) untuk baris barang tersebut, BUKAN harga satuannya.
+8. PENTING: [Modal] WAJIB diisi berupa angka bulat TANPA titik/koma (contoh: Rp 45.300 wajib ditulis 45300). Jangan buang angka nol-nya.
+9. Jangan tambahkan penjelasan, header tabel, markdown, awalan, atau akhiran apapun. Hanya kembalikan teks murni hasil akhirnya saja.";
 
         $payload = [
             "contents" => [
