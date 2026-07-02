@@ -387,15 +387,18 @@ class Webhook_wa extends CI_Controller {
                 
                 $dash_parts = explode(' - ', $left_part);
                 
-                if (count($dash_parts) >= 5) {
-                    $pelanggan = trim($dash_parts[0]);
-                    $suplier = trim($dash_parts[1]);
-                    $deskripsi = trim($dash_parts[2]);
-                    $ukuran = trim($dash_parts[3]);
+                if (count($dash_parts) >= 4) {
+                    $pelanggan = trim($dash_parts[0], " -");
+                    $suplier = trim($dash_parts[1], " -");
+                    $deskripsi = trim($dash_parts[2], " -");
+                    $ukuran = trim($dash_parts[3], " -");
                     
-                    $modal_str = trim($dash_parts[4]);
-                    $modal_str = str_replace(['.', ','], '', $modal_str);
-                    $modal = (int) $modal_str;
+                    $modal = 0;
+                    if (isset($dash_parts[4])) {
+                        $modal_str = trim($dash_parts[4], " -");
+                        $modal_str = str_replace(['.', ','], '', $modal_str);
+                        $modal = (int) $modal_str;
+                    }
                     
                     if ($harga_jual === 0) {
                         $mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
