@@ -8,20 +8,9 @@
 | whenever you intend to do a schema migration.
 |
 */
-$config['migration_enabled'] = FALSE;
-
-
-/*
-|--------------------------------------------------------------------------
-| Migrations version
-|--------------------------------------------------------------------------
-|
-| This is used to set migration version that the file system should be on.
-| If you run $this->migration->latest() this is the version that schema will
-| be upgraded / downgraded to.
-|
-*/
-$config['migration_version'] = 0;
+$config['migration_enabled'] = TRUE;
+$config['migration_type'] = 'sequential';
+$config['migration_version'] = 1;
 
 
 /*
