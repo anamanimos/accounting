@@ -140,9 +140,14 @@ class Webhook_wa extends CI_Controller {
         $prompt = '';
 
         if (isset($payload['image'])) {
-            $image_path = isset($payload['image']['path']) ? $payload['image']['path'] : null;
-            if (!$image_path && isset($payload['image']['url'])) {
-                $image_path = $payload['image']['url'];
+            $image_path = null;
+            if (is_string($payload['image'])) {
+                $image_path = $payload['image'];
+            } elseif (is_array($payload['image'])) {
+                $image_path = $payload['image']['path'] ?? null;
+                if (!$image_path) {
+                    $image_path = $payload['image']['url'] ?? null;
+                }
             }
             
             $nama_order = $body;
