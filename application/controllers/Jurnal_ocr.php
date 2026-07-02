@@ -83,7 +83,8 @@ Aturannya:
 5. [Deskripsi] diambil HANYA dari urutan teks berikut ini: \"" . $nama_order . "\". Jika ada banyak barang di nota, pisahkan teks \"" . $nama_order . "\" dengan koma (,) dan berikan deskripsi yang sesuai untuk setiap baris barang secara berurutan. Misalnya jika input adalah \"Order A, Order B\" dan ada 2 barang di nota, maka barang 1 deskripsinya \"Order A\" dan barang 2 deskripsinya \"Order B\".
 6. [Ukuran] diambil dari JUMLAH KUANTITAS (Banyaknya/Qty) barang tersebut di nota.
 7. [Modal] diambil dari TOTAL HARGA (Subtotal barang tersebut) di nota, BUKAN harga satuannya.
-8. Jangan tambahkan penjelasan, markdown, awalan, atau akhiran apapun. Hanya kembalikan teks hasil akhirnya saja.";
+8. PENTING: [Modal] WAJIB diisi! Tulis angkanya TANPA titik/koma (contoh: Rp 90.000 wajib ditulis 90000). Jangan potong angka nol-nya.
+9. Jangan tambahkan penjelasan, markdown, awalan, atau akhiran apapun. Hanya kembalikan teks hasil akhirnya saja.";
 
         $payload = [
             "contents" => [
