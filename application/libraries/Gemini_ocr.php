@@ -62,8 +62,7 @@ Aturannya:
         ];
 
         $models_to_try = [
-            'gemini-2.5-flash',
-            'gemini-2.5-flash-lite',
+            'gemini-1.5-flash',
             'gemini-2.0-flash',
             'gemini-flash-latest'
         ];
@@ -104,6 +103,7 @@ Aturannya:
         }
 
         $res_json = json_decode($response, true);
+        file_put_contents('gemini_raw_response.txt', $response); // DEBUG
         
         if (!isset($res_json['candidates'][0]['content']['parts'][0]['text'])) {
             return ['success' => false, 'error' => 'Respon API tidak sesuai format yang diharapkan.', 'debug' => $response];
