@@ -19,20 +19,27 @@ class Gemini_ocr {
             return ['success' => false, 'error' => 'Gemini API Key belum disetel di file .env.'];
         }
 
-        $prompt = "Tolong analisis gambar nota ini dan ekstrak SEMUA transaksi/barang menjadi format baris teks persis seperti ini:
-DD - MM - YYYY
-[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]
+        $prompt = "Tolong analisis gambar nota ini dan ekstrak SEMUA transaksi/barang ke dalam format array JSON persis seperti contoh ini:
+[
+  {
+    \"tanggal\": \"DD - MM - YYYY\",
+    \"pelanggan\": \"Sevencols\",
+    \"suplier\": \"[Nama Toko]\",
+    \"deskripsi\": \"[Caption Barang]\",
+    \"ukuran\": [Kuantitas],
+    \"modal\": [Total Harga]
+  }
+]
 
 Aturannya:
-1. Baris pertama HANYA tanggal transaksi di nota (format DD - MM - YYYY).
-2. EKSTRAK SEMUA BARANG DI NOTA. Setiap 1 macam barang di nota WAJIB ditulis menjadi 1 baris baru dengan format di atas. (Jika ada 5 barang, maka akan ada 5 baris).
-3. [Pelanggan] SELALU diisi dengan teks \"Sevencols\" secara hardcode.
-4. [Suplier] diambil dari nama toko yang ada di nota (misal HiATA Clothing).
-5. [Deskripsi] diambil dari teks caption ini: \"" . $nama_order . "\". Jika nota memiliki beberapa barang, bagi teks caption tersebut secara logis (misalnya memisahkan kata 'dan', koma, atau spasi) untuk masing-masing baris barang. Jika tidak bisa dibagi, gunakan teks caption utuh untuk semua baris.
-6. [Ukuran] diambil dari kuantitas/qty (Banyak) barang tersebut di nota.
-7. [Modal] WAJIB DIISI! Diambil dari nominal di kolom 'Jumlah' atau total harga khusus untuk baris barang tersebut, BUKAN harga satuannya.
-8. [Modal] WAJIB ditulis angka bulat TANPA awalan Rp dan TANPA titik/koma (contoh: Rp 57.000 WAJIB ditulis 57000). Jangan potong angka nol-nya.
-9. Jangan tambahkan penjelasan, header tabel, markdown, awalan, atau akhiran apapun. Hanya kembalikan teks murni hasil akhirnya saja.";
+1. Output WAJIB berupa JSON array murni tanpa tambahan teks/penjelasan atau markdown (tanpa awalan ```json).
+2. EKSTRAK SEMUA BARANG. Jika nota memiliki 3 macam barang, array JSON harus berisi 3 object.
+3. 'tanggal' diisi tanggal transaksi di nota dengan format DD - MM - YYYY (harus ada spasi).
+4. 'pelanggan' SELALU diisi teks \"Sevencols\" secara hardcode.
+5. 'suplier' diambil dari nama toko yang menerbitkan nota (misal HiATA Clothing).
+6. 'deskripsi' diambil dari teks caption ini: \"" . $nama_order . "\". Jika ada beberapa barang, sesuaikan/pecah caption ini per barang. Jika tidak, gunakan caption utuh.
+7. 'ukuran' WAJIB diisi dengan angka kuantitas/Banyaknya barang (integer).
+8. 'modal' WAJIB DIISI! Diambil dari nominal di kolom 'Jumlah' atau total harga khusus untuk baris barang tersebut, BUKAN harga satuan. WAJIB diisi berupa angka bulat (integer) TANPA titik/koma (contoh: 262500). Jangan potong angka nol-nya.";
 
         $payload = [
             "contents" => [
@@ -104,9 +111,29 @@ Aturannya:
 
         $generated_text = trim($res_json['candidates'][0]['content']['parts'][0]['text']);
         // Strip out markdown code blocks if gemini still gives it
-        $generated_text = preg_replace('/```[a-z]*\n/i', '', $generated_text);
-        $generated_text = str_replace('```', '', $generated_text);
+        $generated_text = preg_replace('/```json/i', '', $generated_text);
+        $generated_text = preg_replace('/```/i', '', $generated_text);
         $generated_text = trim($generated_text);
+
+        // Attempt to parse JSON and convert to legacy format
+        $json_data = json_decode($generated_text, true);
+        if (is_array($json_data) && count($json_data) > 0) {
+            // First line is the date from the first item
+            $tanggal = $json_data[0]['tanggal'] ?? date('d - m - Y');
+            // Ensure date has spaces around dashes
+            $tanggal = str_replace('-', ' - ', str_replace(' - ', '-', $tanggal));
+            
+            $output_lines = [$tanggal];
+            foreach ($json_data as $item) {
+                $p = $item['pelanggan'] ?? 'Sevencols';
+                $s = $item['suplier'] ?? '';
+                $d = $item['deskripsi'] ?? '';
+                $u = $item['ukuran'] ?? 0;
+                $m = $item['modal'] ?? 0;
+                $output_lines[] = "$p - $s - $d - $u - $m";
+            }
+            $generated_text = implode("\n", $output_lines);
+        }
 
         return ['success' => true, 'text' => $generated_text];
     }
