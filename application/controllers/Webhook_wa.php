@@ -120,23 +120,72 @@ class Webhook_wa extends CI_Controller {
             }
         }
 
-        // Proses Pesan Biasa (Prompt / Gambar)
+        $is_processing_image = false;
+        $image_path_to_process = null;
+        $nama_order_to_process = null;
+        $prompt = '';
+
         if (isset($payload['image'])) {
-            // PROSES GAMBAR
             $image_path = isset($payload['image']['path']) ? $payload['image']['path'] : null;
             if (!$image_path && isset($payload['image']['url'])) {
-                $image_path = $payload['image']['url']; // Harus handle download
+                $image_path = $payload['image']['url'];
             }
             
-            $nama_order = $body; // Caption gambar
+            $nama_order = $body;
             if (empty($nama_order)) {
-                $this->_send_message($chat_id, "Mohon sertakan teks keterangan/caption pada pesan gambar untuk 'Nama Order'.", $message_id);
-                return $this->_response(['status' => 'missing_caption']);
+                $sent_msg = $this->_send_message($chat_id, "Silakan balas pesan ini dengan teks keterangan (Nama Order) untuk gambar tersebut:", $message_id);
+                
+                $bot_msg_id = 'unknown_' . time() . '_' . rand(100, 999);
+                if ($sent_msg) {
+                    if (isset($sent_msg['results']['message_id'])) {
+                        $bot_msg_id = $sent_msg['results']['message_id'];
+                    } elseif (isset($sent_msg['data']['id'])) {
+                        $bot_msg_id = $sent_msg['data']['id'];
+                    } elseif (isset($sent_msg['data']['message_id'])) {
+                        $bot_msg_id = $sent_msg['data']['message_id'];
+                    } elseif (isset($sent_msg['message_id'])) {
+                        $bot_msg_id = $sent_msg['message_id'];
+                    }
+                }
+
+                $this->db->insert('wa_pending_image', [
+                    'message_id' => $bot_msg_id,
+                    'image_url' => $image_path,
+                    'sender_jid' => $sender_jid,
+                    'created_at' => date('Y-m-d H:i:s')
+                ]);
+                return $this->_response(['status' => 'waiting_for_name']);
+            } else {
+                $is_processing_image = true;
+                $image_path_to_process = $image_path;
+                $nama_order_to_process = $nama_order;
+            }
+        } else {
+            // Teks biasa. Cek apakah membalas permintaan Nama Order
+            $pending = null;
+            if ($replied_to_id) {
+                $pending = $this->db->get_where('wa_pending_image', ['message_id' => $replied_to_id])->row();
+            } else {
+                // Cek latest pending request yang belum dijawab
+                $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['sender_jid' => $sender_jid])->row();
             }
 
-            // GOWA URL
+            if ($pending && !empty($body) && !in_array(strtoupper($body), ['YA', 'BATAL'])) {
+                $this->db->delete('wa_pending_image', ['id' => $pending->id]);
+                
+                $is_processing_image = true;
+                $image_path_to_process = $pending->image_url;
+                $nama_order_to_process = $body;
+                
+                $this->_send_message($chat_id, "Memproses gambar dengan nama order: *" . $body . "*...", $message_id);
+            } else {
+                $prompt = $body;
+            }
+        }
+
+        if ($is_processing_image) {
             $gateway_url = rtrim(Env::get('WA_GATEWAY_URL') ?: 'https://wag.anam.ch', '/');
-            $image_url = (strpos($image_path, 'http') === 0) ? $image_path : $gateway_url . '/' . $image_path;
+            $image_url = (strpos($image_path_to_process, 'http') === 0) ? $image_path_to_process : $gateway_url . '/' . $image_path_to_process;
             
             $base64_image = $this->_download_and_base64($image_url);
             if (!$base64_image) {
@@ -144,9 +193,8 @@ class Webhook_wa extends CI_Controller {
                 return $this->_response(['status' => 'image_download_failed']);
             }
 
-            // Kirim ke Gemini
             $this->load->library('gemini_ocr');
-            $gemini_result = $this->gemini_ocr->process_receipt($base64_image, $nama_order);
+            $gemini_result = $this->gemini_ocr->process_receipt($base64_image, $nama_order_to_process);
             
             if (!$gemini_result['success']) {
                 file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] " . $gemini_result['error'] . "\n", FILE_APPEND);
@@ -156,9 +204,6 @@ class Webhook_wa extends CI_Controller {
 
             file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI] Raw Output: \n" . $gemini_result['text'] . "\n", FILE_APPEND);
             $prompt = $gemini_result['text'];
-        } else {
-            // Teks biasa
-            $prompt = $body;
         }
 
         $transactions = $this->_parse_prompt($prompt);
