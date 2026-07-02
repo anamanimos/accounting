@@ -62,6 +62,16 @@ class Webhook_wa extends CI_Controller {
         }
 
         $message_id = $payload['id'] ?? '';
+        
+        // Idempotency check (mencegah proses berulang jika gateway mengirim ulang webhook)
+        if (!empty($message_id)) {
+            $cache_file = FCPATH . 'application/cache/wa_msg_' . md5($message_id);
+            if (file_exists($cache_file)) {
+                return $this->_response(['status' => 'already_processed']);
+            }
+            file_put_contents($cache_file, date('Y-m-d H:i:s'));
+        }
+
         $body = trim($payload['body'] ?? '');
         $sender_jid = $payload['from'] ?? '';
         $replied_to_id = $payload['replied_to_id'] ?? null;
