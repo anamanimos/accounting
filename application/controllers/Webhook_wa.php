@@ -175,7 +175,9 @@ class Webhook_wa extends CI_Controller {
             $pending = null;
             if ($replied_to_id) {
                 $pending = $this->db->get_where('wa_pending_image', ['message_id' => $replied_to_id])->row();
-            } else {
+            }
+            
+            if (!$pending) {
                 // Cek latest pending request yang belum dijawab
                 $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['sender_jid' => $sender_jid])->row();
             }
