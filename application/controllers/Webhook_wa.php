@@ -218,12 +218,22 @@ class Webhook_wa extends CI_Controller {
                 $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['created_at >=' => $fifteen_mins_ago])->row();
             }
 
+            $override_date = null;
             if ($pending && !empty($body) && !in_array(strtoupper($body), ['YA', 'BATAL'])) {
                 $this->db->delete('wa_pending_image', ['id' => $pending->id]);
                 
                 $is_processing_image = true;
                 $image_path_to_process = $pending->image_url;
-                $nama_order_to_process = $body;
+                
+                // Extract optional date in reply text (e.g. "Size Sevencols 14/07/2026")
+                $custom_date = $this->_extract_date($body);
+                $clean_nama_order = preg_replace('/(?:tgl|tanggal)?\s*[:\.]?\s*\d{1,4}[\/\.-]\d{1,2}[\/\.-]\d{1,4}/i', '', $body);
+                $clean_nama_order = trim($clean_nama_order, " \t\n\r\0\x0B*_~\\");
+                
+                $nama_order_to_process = !empty($clean_nama_order) ? $clean_nama_order : $body;
+                if ($custom_date) {
+                    $override_date = $custom_date;
+                }
             } else {
                 $prompt = $body;
             }
@@ -262,19 +272,29 @@ class Webhook_wa extends CI_Controller {
             return $this->_response(['status' => 'ignored_not_prompt']);
         }
 
+        // Apply override date if user specified date in image reply text
+        if (!empty($override_date) && !empty($transactions)) {
+            foreach ($transactions as &$trx) {
+                $trx['tgl'] = $override_date;
+            }
+        }
+
         // Ubah jadi array jurnal yang siap insert
         $jurnal_rows = $this->_build_jurnal_array($transactions);
 
         // Buat pesan balasan preview
         $source_title = $is_processing_image ? "(Hasil Scan Foto Nota)" : "(Hasil Teks Chat Order)";
-        $preview_msg = "*DRAF JURNAL $source_title*\n\n";
+        $first_tgl = !empty($transactions[0]['tgl']) ? date('d-m-Y', strtotime($transactions[0]['tgl'])) : date('d-m-Y');
+        
+        $preview_msg = "*DRAF JURNAL $source_title*\n";
+        $preview_msg .= "Tanggal: *" . $first_tgl . "*\n\n";
+        
         $total_modal = 0;
         $total_jual = 0;
         foreach ($transactions as $i => $trx) {
-            $preview_msg .= ($i+1) . ". " . $trx['tgl'] . "\n";
-            $preview_msg .= "Ket: " . $trx['ket'] . "\n";
-            $preview_msg .= "Jual: Rp " . number_format($trx['harga_jual'],0,',','.') . "\n";
-            $preview_msg .= "Modal: Rp " . number_format($trx['modal'],0,',','.') . "\n\n";
+            $preview_msg .= ($i+1) . ". Ket: " . $trx['ket'] . "\n";
+            $preview_msg .= "   Jual: Rp " . number_format($trx['harga_jual'],0,',','.') . "\n";
+            $preview_msg .= "   Modal: Rp " . number_format($trx['modal'],0,',','.') . "\n\n";
             $total_jual += $trx['harga_jual'];
             $total_modal += $trx['modal'];
         }
@@ -427,6 +447,27 @@ class Webhook_wa extends CI_Controller {
         }
 
         return ['success' => false, 'debug' => implode("\n", $attempt_logs)];
+    }
+
+    private function _extract_date($text)
+    {
+        if (empty($text)) return null;
+
+        // Match formats like: 14/07/2026, 14-07-2026, 2026-07-14, 14.07.2026, Tgl: 14/07/2026
+        if (preg_match('/(?:tgl|tanggal)?\s*[:\.]?\s*(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/i', $text, $m)) {
+            $p1 = (int)$m[1];
+            $p2 = (int)$m[2];
+            $p3 = (int)$m[3];
+
+            if (strlen($m[1]) == 4) {
+                // YYYY-MM-DD
+                return sprintf("%04d-%02d-%02d", $p1, $p2, $p3);
+            } elseif (strlen($m[3]) == 4) {
+                // DD-MM-YYYY
+                return sprintf("%04d-%02d-%02d", $p3, $p2, $p1);
+            }
+        }
+        return null;
     }
 
 
