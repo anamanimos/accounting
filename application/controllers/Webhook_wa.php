@@ -207,9 +207,15 @@ class Webhook_wa extends CI_Controller {
                 $pending = $this->db->get_where('wa_pending_image', ['message_id' => $replied_to_id])->row();
             }
             
-            if (!$pending) {
-                // Cek latest pending request yang belum dijawab
+            if (!$pending && !empty($sender_jid)) {
+                // Cek latest pending request by sender_jid
                 $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['sender_jid' => $sender_jid])->row();
+            }
+
+            if (!$pending) {
+                // Fallback: Cek latest pending request di grup dalam 15 menit terakhir
+                $fifteen_mins_ago = date('Y-m-d H:i:s', time() - 900);
+                $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['created_at >=' => $fifteen_mins_ago])->row();
             }
 
             if ($pending && !empty($body) && !in_array(strtoupper($body), ['YA', 'BATAL'])) {
@@ -225,17 +231,14 @@ class Webhook_wa extends CI_Controller {
 
         if ($is_processing_image) {
             $this->_send_message($chat_id, "Memproses gambar dengan nama order: *" . $nama_order_to_process . "*...", $message_id);
-            
-            if (function_exists('fastcgi_finish_request')) {
-                fastcgi_finish_request();
-            }
 
             $gateway_url = rtrim($this->_get_wa_setting('wa_gateway_url', 'https://wag.nams.my.id'), '/');
-            $image_url = (strpos($image_path_to_process, 'http') === 0) ? $image_path_to_process : $gateway_url . '/' . $image_path_to_process;
+            $clean_path = ltrim($image_path_to_process, '/');
+            $image_url = (strpos($image_path_to_process, 'http') === 0) ? $image_path_to_process : $gateway_url . '/' . $clean_path;
             
             $base64_image = $this->_download_and_base64($image_url);
             if (!$base64_image) {
-                $this->_send_message($chat_id, "Gagal mengunduh gambar nota dari gateway.", $message_id);
+                $this->_send_message($chat_id, "Gagal mengunduh gambar nota dari gateway (" . $image_url . ").", $message_id);
                 return $this->_response(['status' => 'image_download_failed']);
             }
 
@@ -244,7 +247,7 @@ class Webhook_wa extends CI_Controller {
             
             if (!$gemini_result['success']) {
                 file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] " . $gemini_result['error'] . "\n", FILE_APPEND);
-                $this->_send_message($chat_id, "Gagal: Layanan AI sedang bermasalah / sibuk.", $message_id);
+                $this->_send_message($chat_id, "Gagal: Layanan AI sedang bermasalah / sibuk. Error: " . $gemini_result['error'], $message_id);
                 return $this->_response(['status' => 'gemini_error']);
             }
 
@@ -254,10 +257,9 @@ class Webhook_wa extends CI_Controller {
 
         $transactions = $this->_parse_prompt($prompt);
         if (empty($transactions)) {
-            // Jangan balas jika bukan format jurnal agar grup tidak berisik
             file_put_contents(FCPATH.'wa.txt', "[DEBUG] Ignoring message because parsed transactions are empty. Prompt: $prompt\n", FILE_APPEND);
-            if (isset($payload['image'])) {
-                $this->_send_message($chat_id, "Maaf, AI gagal membaca format nota atau teks balasan terlalu pendek. Silakan coba foto nota yang lebih jelas.", $message_id);
+            if ($is_processing_image || isset($payload['image'])) {
+                $this->_send_message($chat_id, "Maaf, AI gagal membaca format nota atau teks balasan tidak sesuai format jurnal. Silakan coba foto nota yang lebih jelas.", $message_id);
             }
             return $this->_response(['status' => 'ignored_not_prompt']);
         }
