@@ -338,7 +338,7 @@ class Jurnal_umum extends CI_Controller {
 		}
 	}
 
-	public function get_jurnal_row()
+	public function get_jurnal_full()
 	{
 		if (empty($this->session->userdata('logged_in'))) {
 			return $this->output->set_content_type('application/json')
@@ -347,16 +347,23 @@ class Jurnal_umum extends CI_Controller {
 		}
 
 		$no_jurnal = $this->input->post('no_jurnal');
-		$no_rek    = $this->input->post('no_rek');
-
-		$row = $this->db->get_where('jurnal_umum', [
-			'no_jurnal' => $no_jurnal,
-			'no_rek'    => $no_rek
-		])->row();
-
-		if ($row) {
+		if (empty($no_jurnal)) {
 			return $this->output->set_content_type('application/json')
-				->set_output(json_encode(['status' => 'success', 'data' => $row]));
+				->set_status_header(400)
+				->set_output(json_encode(['status' => 'error', 'message' => 'No Jurnal wajib diisi']));
+		}
+
+		$rows = $this->db->get_where('jurnal_umum', ['no_jurnal' => $no_jurnal])->result_array();
+
+		if (!empty($rows)) {
+			return $this->output->set_content_type('application/json')
+				->set_output(json_encode([
+					'status' => 'success',
+					'no_jurnal' => $rows[0]['no_jurnal'],
+					'tgl_jurnal' => $rows[0]['tgl_jurnal'],
+					'no_bukti' => $rows[0]['no_bukti'],
+					'rows' => $rows
+				]));
 		}
 
 		return $this->output->set_content_type('application/json')
@@ -364,7 +371,7 @@ class Jurnal_umum extends CI_Controller {
 			->set_output(json_encode(['status' => 'error', 'message' => 'Data jurnal tidak ditemukan']));
 	}
 
-	public function update_jurnal_row()
+	public function save_jurnal_full()
 	{
 		if (empty($this->session->userdata('logged_in'))) {
 			return $this->output->set_content_type('application/json')
@@ -372,52 +379,96 @@ class Jurnal_umum extends CI_Controller {
 				->set_output(json_encode(['status' => 'error', 'message' => 'Unauthorized']));
 		}
 
-		$no_jurnal     = trim($this->input->post('no_jurnal'));
-		$old_no_rek    = trim($this->input->post('old_no_rek'));
-		$new_no_rek    = trim($this->input->post('no_rek'));
-		$tgl_jurnal    = trim($this->input->post('tgl_jurnal'));
-		$no_bukti      = trim($this->input->post('no_bukti'));
-		$ket           = trim($this->input->post('ket'));
-		$debet         = (int) str_replace([',', '.'], '', $this->input->post('debet'));
-		$kredit        = (int) str_replace([',', '.'], '', $this->input->post('kredit'));
-		$apply_all_rows = $this->input->post('apply_all_rows');
-
-		if (empty($no_jurnal) || empty($old_no_rek)) {
-			return $this->output->set_content_type('application/json')
-				->set_status_header(400)
-				->set_output(json_encode(['status' => 'error', 'message' => 'Parameter no_jurnal dan no_rek wajib diisi']));
+		$payload = json_decode($this->input->raw_input_stream, true);
+		if (!$payload) {
+			$payload = $this->input->post();
 		}
 
-		$update_data = [
-			'no_rek'     => !empty($new_no_rek) ? $new_no_rek : $old_no_rek,
-			'tgl_jurnal' => $tgl_jurnal,
-			'no_bukti'   => $no_bukti,
-			'ket'        => $ket,
-			'debet'      => $debet,
-			'kredit'     => $kredit,
-		];
+		$no_jurnal  = trim($payload['no_jurnal'] ?? '');
+		$tgl_jurnal = trim($payload['tgl_jurnal'] ?? '');
+		$no_bukti   = trim($payload['no_bukti'] ?? '');
+		$rows       = isset($payload['rows']) ? $payload['rows'] : [];
 
-		$this->db->where('no_jurnal', $no_jurnal);
-		$this->db->where('no_rek', $old_no_rek);
-		$updated = $this->db->update('jurnal_umum', $update_data);
+		if (empty($no_jurnal) || empty($rows)) {
+			return $this->output->set_content_type('application/json')
+				->set_status_header(400)
+				->set_output(json_encode(['status' => 'error', 'message' => 'Data jurnal atau baris transaksi tidak boleh kosong']));
+		}
 
-		if ($apply_all_rows == '1') {
-			$this->db->where('no_jurnal', $no_jurnal);
-			$this->db->update('jurnal_umum', [
+		$tot_debet = 0;
+		$tot_kredit = 0;
+		$clean_rows = [];
+
+		foreach ($rows as $r) {
+			$no_rek = trim($r['no_rek'] ?? '');
+			$ket    = trim($r['ket'] ?? '');
+			$debet  = (int) str_replace([',', '.'], '', (string)($r['debet'] ?? 0));
+			$kredit = (int) str_replace([',', '.'], '', (string)($r['kredit'] ?? 0));
+
+			if (!empty($no_rek)) {
+				$tot_debet  += $debet;
+				$tot_kredit += $kredit;
+				$clean_rows[] = [
+					'no_rek' => $no_rek,
+					'ket'    => $ket,
+					'debet'  => $debet,
+					'kredit' => $kredit
+				];
+			}
+		}
+
+		if (empty($clean_rows)) {
+			return $this->output->set_content_type('application/json')
+				->set_status_header(400)
+				->set_output(json_encode(['status' => 'error', 'message' => 'Minimal 1 baris rekening harus dipilih']));
+		}
+
+		// Balance Validation
+		if ($tot_debet !== $tot_kredit) {
+			return $this->output->set_content_type('application/json')
+				->set_status_header(400)
+				->set_output(json_encode([
+					'status' => 'error',
+					'message' => "Total Debet (Rp " . number_format($tot_debet, 0, ',', '.') . ") dan Total Kredit (Rp " . number_format($tot_kredit, 0, ',', '.') . ") tidak seimbang (Unbalanced)."
+				]));
+		}
+
+		$username = $this->session->userdata('username');
+		if (empty($username)) $username = 'admin';
+
+		$this->db->trans_start();
+
+		// Delete existing entries for this no_jurnal
+		$this->db->delete('jurnal_umum', ['no_jurnal' => $no_jurnal]);
+
+		// Insert all updated rows
+		foreach ($clean_rows as $r) {
+			$this->db->insert('jurnal_umum', [
+				'no_jurnal'  => $no_jurnal,
 				'tgl_jurnal' => $tgl_jurnal,
 				'no_bukti'   => $no_bukti,
-				'ket'        => $ket
+				'no_rek'     => $r['no_rek'],
+				'ket'        => $r['ket'],
+				'debet'      => $r['debet'],
+				'kredit'     => $r['kredit'],
+				'username'   => $username,
+				'tgl_insert' => date('Y-m-d H:i:s')
 			]);
 		}
 
-		if ($updated) {
+		$this->db->trans_complete();
+
+		if ($this->db->trans_status() === FALSE) {
 			return $this->output->set_content_type('application/json')
-				->set_output(json_encode(['status' => 'success', 'message' => 'Data jurnal berhasil diperbarui']));
+				->set_status_header(500)
+				->set_output(json_encode(['status' => 'error', 'message' => 'Gagal menyimpan pembaruan ke database']));
 		}
 
 		return $this->output->set_content_type('application/json')
-			->set_status_header(500)
-			->set_output(json_encode(['status' => 'error', 'message' => 'Gagal memperbarui data jurnal']));
+			->set_output(json_encode([
+				'status' => 'success',
+				'message' => 'Seluruh baris transaksi No. Jurnal ' . $no_jurnal . ' berhasil diperbarui!'
+			]));
 	}
 	
 	
