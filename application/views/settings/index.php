@@ -93,12 +93,15 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label required fw-bold text-gray-800 fs-6">Model Gemini Default</label>
-                                <select name="gemini_model" class="form-select form-select-solid" data-control="select2" data-hide-search="true">
-                                    <option value="gemini-1.5-flash" <?php echo ($gemini_model == 'gemini-1.5-flash') ? 'selected' : ''; ?>>gemini-1.5-flash (Sangat Stabil & Cepat)</option>
-                                    <option value="gemini-1.5-flash-latest" <?php echo ($gemini_model == 'gemini-1.5-flash-latest') ? 'selected' : ''; ?>>gemini-1.5-flash-latest (Alias Terbaru)</option>
-                                    <option value="gemini-2.0-flash" <?php echo ($gemini_model == 'gemini-2.0-flash') ? 'selected' : ''; ?>>gemini-2.0-flash (Versi 2.0)</option>
-                                    <option value="gemini-2.0-flash-exp" <?php echo ($gemini_model == 'gemini-2.0-flash-exp') ? 'selected' : ''; ?>>gemini-2.0-flash-exp (Eksperimental)</option>
-                                    <option value="gemini-1.5-pro" <?php echo ($gemini_model == 'gemini-1.5-pro') ? 'selected' : ''; ?>>gemini-1.5-pro (Akurasi Tinggi)</option>
+                                <select name="gemini_model" id="gemini_model_select" class="form-select form-select-solid">
+                                    <option value="gemini-2.5-flash" <?php echo ($gemini_model == 'gemini-2.5-flash') ? 'selected' : ''; ?>>gemini-2.5-flash (⭐ Sangat Direkomendasikan - Cepat & Akurat)</option>
+                                    <option value="gemini-2.0-flash" <?php echo ($gemini_model == 'gemini-2.0-flash') ? 'selected' : ''; ?>>gemini-2.0-flash (Flash Vision v2.0)</option>
+                                    <option value="gemini-flash-latest" <?php echo ($gemini_model == 'gemini-flash-latest') ? 'selected' : ''; ?>>gemini-flash-latest (Alias Flash Terbaru)</option>
+                                    <option value="gemini-2.5-pro" <?php echo ($gemini_model == 'gemini-2.5-pro') ? 'selected' : ''; ?>>gemini-2.5-pro (Akurasi Tinggi untuk Nota Kompleks)</option>
+                                    <option value="gemini-3.6-flash" <?php echo ($gemini_model == 'gemini-3.6-flash') ? 'selected' : ''; ?>>gemini-3.6-flash (Versi 3.6 Flash)</option>
+                                    <option value="gemini-3.5-flash" <?php echo ($gemini_model == 'gemini-3.5-flash') ? 'selected' : ''; ?>>gemini-3.5-flash (Versi 3.5 Flash)</option>
+                                    <option value="gemini-2.0-flash-lite" <?php echo ($gemini_model == 'gemini-2.0-flash-lite') ? 'selected' : ''; ?>>gemini-2.0-flash-lite (Super Ringan & Cepat)</option>
+                                    <option value="gemini-pro-latest" <?php echo ($gemini_model == 'gemini-pro-latest') ? 'selected' : ''; ?>>gemini-pro-latest (Pro Terbaru)</option>
                                 </select>
                             </div>
                         </div>
@@ -266,10 +269,21 @@ function listModelsAPI() {
                 $('#testStatusTitle').text('Daftar Model yang Didukung API Key Anda (' + res.endpoint + ')');
                 
                 var out = "Daftar Model yang Aktif & Mendukung generateContent:\n\n";
+                var $select = $('#gemini_model_select');
+                var currentVal = $select.val();
+                $select.empty();
+
                 res.models.forEach(function(m, idx) {
                     out += (idx + 1) + ". " + m.name + " (" + m.displayName + ")\n";
+                    var isSel = (m.name === currentVal || (idx === 0 && !currentVal)) ? 'selected' : '';
+                    $select.append('<option value="' + m.name + '" ' + isSel + '>' + m.name + ' (' + m.displayName + ')</option>');
                 });
-                $('#testResultDetails').text(out);
+
+                if (currentVal && $select.find('option[value="' + currentVal + '"]').length > 0) {
+                    $select.val(currentVal);
+                }
+
+                $('#testResultDetails').text(out + "\n[INFO] Dropdown 'Model Gemini Default' di atas telah diperbarui secara otomatis!");
             } else {
                 $('#testStatusBadge').attr('class', 'badge badge-light-danger me-3 fs-6').text('GAGAL');
                 $('#testStatusTitle').text('Gagal Mengambil Daftar Model');

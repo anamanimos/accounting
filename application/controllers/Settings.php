@@ -36,7 +36,7 @@ class Settings extends CI_Controller {
 		$d['gemini_api_key'] = $this->app_model->get_setting('gemini_api_key', '');
 		$d['google_api_key'] = $this->app_model->get_setting('google_api_key', '');
 		$d['ocr_provider']   = $this->app_model->get_setting('ocr_provider', 'gemini_flash');
-		$d['gemini_model']   = $this->app_model->get_setting('gemini_model', 'gemini-1.5-flash');
+		$d['gemini_model']   = $this->app_model->get_setting('gemini_model', 'gemini-2.5-flash');
 
 		$d['content'] = 'settings/index';
 		$this->load->view('templates/main', $d);
