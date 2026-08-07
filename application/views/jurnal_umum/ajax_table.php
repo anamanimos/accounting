@@ -34,8 +34,14 @@
 					<td class="text-muted"><?php echo $db['ket']; ?></td>
 					<td align="right" class="fw-bold" width="100"><?php echo number_format($db['debet']); ?></td>
 					<td align="right" class="fw-bold" width="100"><?php echo number_format($db['kredit']); ?></td>
-					<td align="center" width="60">
-						<a class="btn btn-icon btn-sm btn-light-danger h-30px w-30px" href="<?php echo base_url(); ?>jurnal_umum/hapus/<?php echo $db['no_jurnal']; ?>" onClick="return confirm('Anda yakin ingin menghapus nomor jurnal ini?')">
+					<td align="center" width="90">
+						<button type="button" class="btn btn-icon btn-sm btn-light-primary h-30px w-30px me-1 btn-edit-jurnal" 
+								data-nojurnal="<?php echo $db['no_jurnal']; ?>" 
+								data-norek="<?php echo $db['no_rek']; ?>"
+								title="Edit Jurnal">
+							<i class="ki-outline ki-pencil fs-5"></i>
+						</button>
+						<a class="btn btn-icon btn-sm btn-light-danger h-30px w-30px" href="<?php echo base_url(); ?>jurnal_umum/hapus/<?php echo $db['no_jurnal']; ?>" onClick="return confirm('Anda yakin ingin menghapus nomor jurnal ini?')" title="Hapus Jurnal">
 							<i class="ki-outline ki-trash fs-5"></i>
 						</a>
 					</td>

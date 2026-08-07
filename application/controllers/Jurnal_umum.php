@@ -319,11 +319,9 @@ class Jurnal_umum extends CI_Controller {
 
 	
 	public function edit()
-
 	{
 		$cek = $this->session->userdata('logged_in');
 		if(!empty($cek)){
-			
 			$id = $this->input->post('id');  
 			$text = "SELECT * FROM jurnal_umum WHERE no_jurnal='$id' LIMIT 1";
 			$data = $this->app_model->manualQuery($text);
@@ -338,6 +336,88 @@ class Jurnal_umum extends CI_Controller {
 		}else{
 			header('location:'.base_url());
 		}
+	}
+
+	public function get_jurnal_row()
+	{
+		if (empty($this->session->userdata('logged_in'))) {
+			return $this->output->set_content_type('application/json')
+				->set_status_header(401)
+				->set_output(json_encode(['status' => 'error', 'message' => 'Unauthorized']));
+		}
+
+		$no_jurnal = $this->input->post('no_jurnal');
+		$no_rek    = $this->input->post('no_rek');
+
+		$row = $this->db->get_where('jurnal_umum', [
+			'no_jurnal' => $no_jurnal,
+			'no_rek'    => $no_rek
+		])->row();
+
+		if ($row) {
+			return $this->output->set_content_type('application/json')
+				->set_output(json_encode(['status' => 'success', 'data' => $row]));
+		}
+
+		return $this->output->set_content_type('application/json')
+			->set_status_header(404)
+			->set_output(json_encode(['status' => 'error', 'message' => 'Data jurnal tidak ditemukan']));
+	}
+
+	public function update_jurnal_row()
+	{
+		if (empty($this->session->userdata('logged_in'))) {
+			return $this->output->set_content_type('application/json')
+				->set_status_header(401)
+				->set_output(json_encode(['status' => 'error', 'message' => 'Unauthorized']));
+		}
+
+		$no_jurnal     = trim($this->input->post('no_jurnal'));
+		$old_no_rek    = trim($this->input->post('old_no_rek'));
+		$new_no_rek    = trim($this->input->post('no_rek'));
+		$tgl_jurnal    = trim($this->input->post('tgl_jurnal'));
+		$no_bukti      = trim($this->input->post('no_bukti'));
+		$ket           = trim($this->input->post('ket'));
+		$debet         = (int) str_replace([',', '.'], '', $this->input->post('debet'));
+		$kredit        = (int) str_replace([',', '.'], '', $this->input->post('kredit'));
+		$apply_all_rows = $this->input->post('apply_all_rows');
+
+		if (empty($no_jurnal) || empty($old_no_rek)) {
+			return $this->output->set_content_type('application/json')
+				->set_status_header(400)
+				->set_output(json_encode(['status' => 'error', 'message' => 'Parameter no_jurnal dan no_rek wajib diisi']));
+		}
+
+		$update_data = [
+			'no_rek'     => !empty($new_no_rek) ? $new_no_rek : $old_no_rek,
+			'tgl_jurnal' => $tgl_jurnal,
+			'no_bukti'   => $no_bukti,
+			'ket'        => $ket,
+			'debet'      => $debet,
+			'kredit'     => $kredit,
+		];
+
+		$this->db->where('no_jurnal', $no_jurnal);
+		$this->db->where('no_rek', $old_no_rek);
+		$updated = $this->db->update('jurnal_umum', $update_data);
+
+		if ($apply_all_rows == '1') {
+			$this->db->where('no_jurnal', $no_jurnal);
+			$this->db->update('jurnal_umum', [
+				'tgl_jurnal' => $tgl_jurnal,
+				'no_bukti'   => $no_bukti,
+				'ket'        => $ket
+			]);
+		}
+
+		if ($updated) {
+			return $this->output->set_content_type('application/json')
+				->set_output(json_encode(['status' => 'success', 'message' => 'Data jurnal berhasil diperbarui']));
+		}
+
+		return $this->output->set_content_type('application/json')
+			->set_status_header(500)
+			->set_output(json_encode(['status' => 'error', 'message' => 'Gagal memperbarui data jurnal']));
 	}
 	
 	
