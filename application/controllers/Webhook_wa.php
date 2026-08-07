@@ -266,7 +266,8 @@ class Webhook_wa extends CI_Controller {
         $jurnal_rows = $this->_build_jurnal_array($transactions);
 
         // Buat pesan balasan preview
-        $preview_msg = "*DRAF JURNAL*\n\n";
+        $source_title = $is_processing_image ? "(Hasil Scan Foto Nota)" : "(Hasil Teks Chat Order)";
+        $preview_msg = "*DRAF JURNAL $source_title*\n\n";
         $total_modal = 0;
         $total_jual = 0;
         foreach ($transactions as $i => $trx) {
