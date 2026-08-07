@@ -53,17 +53,32 @@
                 <div class="card-body pt-0">
                     <form action="<?php echo base_url(); ?>settings/simpan" method="post" id="formMainSettings">
                         
-                        <div class="mb-7">
-                            <label class="form-label required fw-bold text-gray-800 fs-6">Google Cloud / AI Studio API Key (Free Tier)</label>
-                            <div class="input-group">
-                                <input type="password" id="google_api_key" name="google_api_key" value="<?php echo htmlspecialchars($google_api_key); ?>" class="form-control form-control-solid" placeholder="Masukkan Google API Key (AIzaSy...)" />
-                                <button type="button" class="btn btn-secondary" onclick="toggleKeyVisibility()">
-                                    <i class="ki-outline ki-eye fs-2" id="eyeIcon"></i> Sembunyikan/Lihat
-                                </button>
+                        <div class="row mb-7">
+                            <div class="col-md-6 mb-5 mb-md-0">
+                                <label class="form-label required fw-bold text-gray-800 fs-6">Gemini API Key (Google AI Studio)</label>
+                                <div class="input-group">
+                                    <input type="password" id="gemini_api_key" name="gemini_api_key" value="<?php echo htmlspecialchars($gemini_api_key); ?>" class="form-control form-control-solid" placeholder="AIzaSy..." />
+                                    <button type="button" class="btn btn-secondary" onclick="toggleKeyVisibility('gemini_api_key')">
+                                        <i class="ki-outline ki-eye fs-2"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text text-muted mt-2">
+                                    <span class="badge badge-light-primary me-1">Free Tier</span>
+                                    Dibuat dari <a href="https://aistudio.google.com/app/apikey" target="_blank" class="fw-bold text-primary">Google AI Studio</a> (1.500 RPD / 15 RPM).
+                                </div>
                             </div>
-                            <div class="form-text text-muted mt-2">
-                                <span class="badge badge-light-primary me-1">Free Tier</span>
-                                Didapatkan dari Google AI Studio atau Google Cloud Console (Free Tier 1.500 RPD / 1.000 Vision OCR per bulan).
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-gray-800 fs-6">Google Cloud Vision API Key (Opsional)</label>
+                                <div class="input-group">
+                                    <input type="password" id="google_api_key" name="google_api_key" value="<?php echo htmlspecialchars($google_api_key); ?>" class="form-control form-control-solid" placeholder="AIzaSy..." />
+                                    <button type="button" class="btn btn-secondary" onclick="toggleKeyVisibility('google_api_key')">
+                                        <i class="ki-outline ki-eye fs-2"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text text-muted mt-2">
+                                    <span class="badge badge-light-info me-1">Free Tier</span>
+                                    Dibuat dari Google Cloud Console. Kosongkan jika sama dengan Gemini Key.
+                                </div>
                             </div>
                         </div>
 
@@ -139,8 +154,8 @@
 <!--end::Content wrapper-->
 
 <script>
-function toggleKeyVisibility() {
-    var field = document.getElementById('google_api_key');
+function toggleKeyVisibility(id) {
+    var field = document.getElementById(id || 'gemini_api_key');
     if (field.type === "password") {
         field.type = "text";
     } else {
@@ -149,7 +164,8 @@ function toggleKeyVisibility() {
 }
 
 function testGeminiAPI() {
-    var key = $('#google_api_key').val().trim();
+    var geminiKey = $('#gemini_api_key').val().trim();
+    var googleKey = $('#google_api_key').val().trim();
     var model = $('select[name="gemini_model"]').val();
     
     $('#testResultBox').slideDown();
@@ -162,7 +178,7 @@ function testGeminiAPI() {
     $.ajax({
         url: baseUrl + 'settings/test_gemini',
         type: 'POST',
-        data: { google_api_key: key, gemini_model: model },
+        data: { gemini_api_key: geminiKey, google_api_key: googleKey, gemini_model: model },
         dataType: 'json',
         success: function(res) {
             $('#btnTestGemini').removeClass('disabled');
@@ -186,7 +202,8 @@ function testGeminiAPI() {
 }
 
 function testVisionAPI() {
-    var key = $('#google_api_key').val().trim();
+    var googleKey = $('#google_api_key').val().trim();
+    var geminiKey = $('#gemini_api_key').val().trim();
     
     $('#testResultBox').slideDown();
     $('#testStatusBadge').attr('class', 'badge badge-light-warning me-3 fs-6').text('Memproses...');
@@ -198,7 +215,7 @@ function testVisionAPI() {
     $.ajax({
         url: baseUrl + 'settings/test_vision',
         type: 'POST',
-        data: { google_api_key: key },
+        data: { google_api_key: googleKey, gemini_api_key: geminiKey },
         dataType: 'json',
         success: function(res) {
             $('#btnTestVision').removeClass('disabled');

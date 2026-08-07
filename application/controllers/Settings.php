@@ -33,6 +33,7 @@ class Settings extends CI_Controller {
 
 		// Fetch all key-value settings
 		$d['all_settings']   = $this->app_model->get_all_settings();
+		$d['gemini_api_key'] = $this->app_model->get_setting('gemini_api_key', '');
 		$d['google_api_key'] = $this->app_model->get_setting('google_api_key', '');
 		$d['ocr_provider']   = $this->app_model->get_setting('ocr_provider', 'gemini_flash');
 		$d['gemini_model']   = $this->app_model->get_setting('gemini_model', 'gemini-1.5-flash');
@@ -49,12 +50,21 @@ class Settings extends CI_Controller {
 				->set_output(json_encode(['status' => 'error', 'message' => 'Unauthorized']));
 		}
 
+		$gemini_api_key = trim($this->input->post('gemini_api_key'));
 		$google_api_key = trim($this->input->post('google_api_key'));
 		$ocr_provider   = trim($this->input->post('ocr_provider'));
 		$gemini_model   = trim($this->input->post('gemini_model'));
 
+		// Fallback if one is empty
+		if (empty($google_api_key)) {
+			$google_api_key = $gemini_api_key;
+		}
+		if (empty($gemini_api_key)) {
+			$gemini_api_key = $google_api_key;
+		}
+
+		$this->app_model->set_setting('gemini_api_key', $gemini_api_key);
 		$this->app_model->set_setting('google_api_key', $google_api_key);
-		$this->app_model->set_setting('gemini_api_key', $google_api_key);
 		$this->app_model->set_setting('ocr_provider', $ocr_provider);
 		$this->app_model->set_setting('gemini_model', $gemini_model);
 
@@ -125,7 +135,10 @@ class Settings extends CI_Controller {
 				->set_output(json_encode(['status' => 'error', 'message' => 'Unauthorized']));
 		}
 
-		$key   = trim($this->input->post('google_api_key'));
+		$key   = trim($this->input->post('gemini_api_key'));
+		if (empty($key)) {
+			$key = trim($this->input->post('google_api_key'));
+		}
 		$model = trim($this->input->post('gemini_model'));
 
 		$this->load->library('gemini_ocr');
@@ -144,6 +157,9 @@ class Settings extends CI_Controller {
 		}
 
 		$key = trim($this->input->post('google_api_key'));
+		if (empty($key)) {
+			$key = trim($this->input->post('gemini_api_key'));
+		}
 
 		$this->load->library('gemini_ocr');
 		$res = $this->gemini_ocr->test_vision($key);

@@ -14,9 +14,26 @@ class Gemini_ocr {
     }
 
     /**
-     * Fetch Google Cloud / Gemini API key from DB settings table, fallback to .env
+     * Fetch Gemini API key (from AI Studio or DB settings)
      */
-    public function get_api_key() {
+    public function get_gemini_api_key() {
+        $key = '';
+        if (isset($this->CI->app_model) && method_exists($this->CI->app_model, 'get_setting')) {
+            $key = $this->CI->app_model->get_setting('gemini_api_key', '');
+            if (empty($key)) {
+                $key = $this->CI->app_model->get_setting('google_api_key', '');
+            }
+        }
+        if (empty($key) && class_exists('Env')) {
+            $key = Env::get('GEMINI_API_KEY');
+        }
+        return trim($key);
+    }
+
+    /**
+     * Fetch Google Cloud Vision API key
+     */
+    public function get_vision_api_key() {
         $key = '';
         if (isset($this->CI->app_model) && method_exists($this->CI->app_model, 'get_setting')) {
             $key = $this->CI->app_model->get_setting('google_api_key', '');
@@ -28,6 +45,10 @@ class Gemini_ocr {
             $key = Env::get('GEMINI_API_KEY');
         }
         return trim($key);
+    }
+
+    public function get_api_key() {
+        return $this->get_gemini_api_key();
     }
 
     /**
