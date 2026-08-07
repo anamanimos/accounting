@@ -52,6 +52,67 @@ class Gemini_ocr {
     }
 
     /**
+     * Helper to call Gemini API trying multiple endpoints (v1beta, v1) and model candidates
+     */
+    protected function call_gemini_api($payload, $api_key, $primary_model = 'gemini-1.5-flash') {
+        $endpoints = ['v1beta', 'v1'];
+        $models_to_try = array_unique([
+            $primary_model,
+            'gemini-1.5-flash',
+            'gemini-1.5-flash-latest',
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-exp',
+            'gemini-1.5-pro'
+        ]);
+
+        $last_response = '';
+        $last_http_code = 0;
+        $used_model = '';
+        $used_endpoint = '';
+
+        foreach ($endpoints as $ver) {
+            foreach ($models_to_try as $model) {
+                $url = "https://generativelanguage.googleapis.com/" . $ver . "/models/" . $model . ":generateContent?key=" . $api_key;
+                
+                $ch = curl_init($url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+                
+                $response = curl_exec($ch);
+                $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($http_code === 200) {
+                    return [
+                        'success' => true,
+                        'http_code' => 200,
+                        'endpoint' => $ver,
+                        'model' => $model,
+                        'response' => $response
+                    ];
+                }
+
+                $last_http_code = $http_code;
+                $last_response = $response;
+                $used_model = $model;
+                $used_endpoint = $ver;
+            }
+        }
+
+        return [
+            'success' => false,
+            'http_code' => $last_http_code,
+            'endpoint' => $used_endpoint,
+            'model' => $used_model,
+            'response' => $last_response
+        ];
+    }
+
+    /**
      * Test Gemini API Connection
      */
     public function test_gemini($custom_key = null, $custom_model = 'gemini-1.5-flash') {
@@ -61,8 +122,6 @@ class Gemini_ocr {
         }
 
         $model = !empty($custom_model) ? trim($custom_model) : 'gemini-1.5-flash';
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $api_key;
-
         $payload = [
             "contents" => [
                 [
@@ -77,40 +136,29 @@ class Gemini_ocr {
             ]
         ];
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        $res = $this->call_gemini_api($payload, $api_key, $model);
 
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curl_err = curl_error($ch);
-        curl_close($ch);
-
-        if (!empty($curl_err)) {
-            return ['success' => false, 'error' => 'cURL Error: ' . $curl_err];
+        if (!$res['success']) {
+            $res_json = json_decode($res['response'], true);
+            $msg = $res_json['error']['message'] ?? ('HTTP Error ' . $res['http_code']);
+            return ['success' => false, 'error' => 'Google Gemini API Error (' . $res['http_code'] . '): ' . $msg, 'debug' => $res['response']];
         }
 
-        if ($http_code !== 200) {
-            $res_json = json_decode($response, true);
-            $msg = $res_json['error']['message'] ?? ('HTTP Error ' . $http_code);
-            return ['success' => false, 'error' => 'Google Gemini API Error (' . $http_code . '): ' . $msg, 'debug' => $response];
-        }
-
-        $res_json = json_decode($response, true);
+        $res_json = json_decode($res['response'], true);
         $text = trim($res_json['candidates'][0]['content']['parts'][0]['text'] ?? 'Respon kosong');
 
-        return ['success' => true, 'message' => 'Koneksi Gemini API (' . $model . ') Berhasil!', 'response' => $text];
+        return [
+            'success' => true,
+            'message' => 'Koneksi Gemini API (' . $res['model'] . ' / ' . $res['endpoint'] . ') Berhasil!',
+            'response' => $text
+        ];
     }
 
     /**
      * Test Google Cloud Vision API Connection
      */
     public function test_vision($custom_key = null) {
-        $api_key = !empty($custom_key) ? trim($custom_key) : $this->get_api_key();
+        $api_key = !empty($custom_key) ? trim($custom_key) : $this->get_vision_api_key();
         if (empty($api_key)) {
             return ['success' => false, 'error' => 'API Key belum diisi.'];
         }
@@ -162,7 +210,7 @@ class Gemini_ocr {
      * Process receipt using Google Cloud Vision API or Gemini (Free Tier)
      */
     public function process_receipt($base64_image, $nama_order, $mime_type = 'image/jpeg') {
-        $api_key = $this->get_api_key();
+        $api_key = $this->get_gemini_api_key();
         if (empty($api_key)) {
             return ['success' => false, 'error' => 'Google Cloud / Gemini API Key belum disetel. Silakan atur di Halaman Settings atau .env.'];
         }
@@ -188,7 +236,8 @@ class Gemini_ocr {
      * Process using Google Cloud Vision API (Free Tier - 1,000 units/mo)
      */
     protected function process_via_cloud_vision($base64_image, $nama_order, $api_key) {
-        $url = "https://vision.googleapis.com/v1/images:annotate?key=" . $api_key;
+        $vision_key = $this->get_vision_api_key();
+        $url = "https://vision.googleapis.com/v1/images:annotate?key=" . $vision_key;
         $payload = [
             "requests" => [
                 [
@@ -277,19 +326,13 @@ Aturannya:
             ]
         ];
 
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" . $api_key;
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+        $res = $this->call_gemini_api($payload, $api_key, 'gemini-1.5-flash');
 
-        $response = curl_exec($ch);
-        curl_close($ch);
+        if (!$res['success']) {
+            return ['success' => false, 'error' => 'Gagal menstrukturkan teks dengan Gemini API. HTTP Code: ' . $res['http_code'], 'debug' => $res['response']];
+        }
 
-        $res_json = json_decode($response, true);
+        $res_json = json_decode($res['response'], true);
         $generated_text = trim($res_json['candidates'][0]['content']['parts'][0]['text'] ?? '');
         $generated_text = preg_replace('/```json/i', '', $generated_text);
         $generated_text = preg_replace('/```/i', '', $generated_text);
@@ -344,51 +387,17 @@ Aturannya:
             ]
         ];
 
-        $models_to_try = array_unique([
-            $primary_model,
-            'gemini-1.5-flash',
-            'gemini-2.0-flash',
-            'gemini-flash-latest'
-        ]);
+        $res = $this->call_gemini_api($payload, $api_key, $primary_model);
 
-        $http_code = 0;
-        $response = '';
-
-        foreach ($models_to_try as $model) {
-            $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $api_key;
-            
-            $ch = curl_init($url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 25);
-            
-            $response = curl_exec($ch);
-            
-            if (curl_errno($ch)) {
-                curl_close($ch);
-                continue;
-            }
-
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($http_code === 200) {
-                break;
-            }
+        if (!$res['success']) {
+            return ['success' => false, 'error' => 'Gagal menghubungi API Google Cloud / Gemini. HTTP Code: ' . $res['http_code'], 'debug' => $res['response']];
         }
 
-        if ($http_code !== 200) {
-            return ['success' => false, 'error' => 'Gagal menghubungi API Google Cloud / Gemini. HTTP Code: ' . $http_code, 'debug' => $response];
-        }
-
-        $res_json = json_decode($response, true);
-        file_put_contents(FCPATH . 'gemini_raw_response.txt', $response); // DEBUG
+        $res_json = json_decode($res['response'], true);
+        file_put_contents(FCPATH . 'gemini_raw_response.txt', $res['response']); // DEBUG
         
         if (!isset($res_json['candidates'][0]['content']['parts'][0]['text'])) {
-            return ['success' => false, 'error' => 'Respon API tidak sesuai format yang diharapkan.', 'debug' => $response];
+            return ['success' => false, 'error' => 'Respon API tidak sesuai format yang diharapkan.', 'debug' => $res['response']];
         }
 
         $generated_text = trim($res_json['candidates'][0]['content']['parts'][0]['text']);

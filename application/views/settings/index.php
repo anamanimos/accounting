@@ -95,7 +95,9 @@
                                 <label class="form-label required fw-bold text-gray-800 fs-6">Model Gemini Default</label>
                                 <select name="gemini_model" class="form-select form-select-solid" data-control="select2" data-hide-search="true">
                                     <option value="gemini-1.5-flash" <?php echo ($gemini_model == 'gemini-1.5-flash') ? 'selected' : ''; ?>>gemini-1.5-flash (Sangat Stabil & Cepat)</option>
-                                    <option value="gemini-2.0-flash" <?php echo ($gemini_model == 'gemini-2.0-flash') ? 'selected' : ''; ?>>gemini-2.0-flash (Versi Terbaru)</option>
+                                    <option value="gemini-1.5-flash-latest" <?php echo ($gemini_model == 'gemini-1.5-flash-latest') ? 'selected' : ''; ?>>gemini-1.5-flash-latest (Alias Terbaru)</option>
+                                    <option value="gemini-2.0-flash" <?php echo ($gemini_model == 'gemini-2.0-flash') ? 'selected' : ''; ?>>gemini-2.0-flash (Versi 2.0)</option>
+                                    <option value="gemini-2.0-flash-exp" <?php echo ($gemini_model == 'gemini-2.0-flash-exp') ? 'selected' : ''; ?>>gemini-2.0-flash-exp (Eksperimental)</option>
                                     <option value="gemini-1.5-pro" <?php echo ($gemini_model == 'gemini-1.5-pro') ? 'selected' : ''; ?>>gemini-1.5-pro (Akurasi Tinggi)</option>
                                 </select>
                             </div>
