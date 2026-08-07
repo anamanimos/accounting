@@ -232,22 +232,19 @@ class Webhook_wa extends CI_Controller {
         if ($is_processing_image) {
             $this->_send_message($chat_id, "Memproses gambar dengan nama order: *" . $nama_order_to_process . "*...", $message_id);
 
-            $gateway_url = rtrim($this->_get_wa_setting('wa_gateway_url', 'https://wag.nams.my.id'), '/');
-            $clean_path = ltrim($image_path_to_process, '/');
-            $image_url = (strpos($image_path_to_process, 'http') === 0) ? $image_path_to_process : $gateway_url . '/' . $clean_path;
-            
-            $base64_image = $this->_download_and_base64($image_url);
-            if (!$base64_image) {
-                $this->_send_message($chat_id, "Gagal mengunduh gambar nota dari gateway (" . $image_url . ").", $message_id);
+            $dl_res = $this->_download_and_base64($image_path_to_process);
+            if (!$dl_res['success']) {
+                $this->_send_message($chat_id, "⚠️ Gagal mengunduh gambar nota dari gateway.\n\n*Log:* " . $dl_res['debug'], $message_id);
                 return $this->_response(['status' => 'image_download_failed']);
             }
+            $base64_image = $dl_res['base64'];
 
             $this->load->library('gemini_ocr');
             $gemini_result = $this->gemini_ocr->process_receipt($base64_image, $nama_order_to_process);
             
             if (!$gemini_result['success']) {
                 file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] " . $gemini_result['error'] . "\n", FILE_APPEND);
-                $this->_send_message($chat_id, "Gagal: Layanan AI sedang bermasalah / sibuk. Error: " . $gemini_result['error'], $message_id);
+                $this->_send_message($chat_id, "⚠️ Gagal AI Gemini (" . ($gemini_result['error'] ?? 'Error') . ").", $message_id);
                 return $this->_response(['status' => 'gemini_error']);
             }
 
@@ -259,7 +256,8 @@ class Webhook_wa extends CI_Controller {
         if (empty($transactions)) {
             file_put_contents(FCPATH.'wa.txt', "[DEBUG] Ignoring message because parsed transactions are empty. Prompt: $prompt\n", FILE_APPEND);
             if ($is_processing_image || isset($payload['image'])) {
-                $this->_send_message($chat_id, "Maaf, AI gagal membaca format nota atau teks balasan tidak sesuai format jurnal. Silakan coba foto nota yang lebih jelas.", $message_id);
+                $short_prompt = (strlen($prompt) > 250) ? substr($prompt, 0, 250) . '...' : $prompt;
+                $this->_send_message($chat_id, "⚠️ AI Gemini selesai membaca tetapi tidak menemukan format transaksi valid.\n\n*Hasil Teks AI:* \n" . $short_prompt, $message_id);
             }
             return $this->_response(['status' => 'ignored_not_prompt']);
         }
@@ -382,6 +380,8 @@ class Webhook_wa extends CI_Controller {
 
         $candidates = array_unique($candidates);
 
+        $attempt_logs = [];
+
         foreach ($candidates as $cand_url) {
             $ch = curl_init($cand_url);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -395,12 +395,13 @@ class Webhook_wa extends CI_Controller {
             $data = curl_exec($ch);
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            $curl_err = curl_error($ch);
             curl_close($ch);
 
             if ($http_code === 200 && !empty($data)) {
                 // Ignore HTML error pages
                 if (strpos($data, '<!DOCTYPE') !== false || strpos($data, '<html') !== false) {
-                    file_put_contents(FCPATH.'wa.txt', "[DEBUG DOWNLOAD FAIL HTML] $cand_url returned HTML page\n", FILE_APPEND);
+                    $attempt_logs[] = "$cand_url -> HTTP 200 but HTML error page";
                     continue;
                 }
 
@@ -415,14 +416,16 @@ class Webhook_wa extends CI_Controller {
 
                 if ($is_image || (is_string($content_type) && strpos($content_type, 'image/') !== false)) {
                     file_put_contents(FCPATH.'wa.txt', "[DEBUG DOWNLOAD SUCCESS] $cand_url, Size: " . strlen($data) . " bytes\n", FILE_APPEND);
-                    return base64_encode($data);
+                    return ['success' => true, 'base64' => base64_encode($data), 'url' => $cand_url, 'size' => strlen($data)];
+                } else {
+                    $attempt_logs[] = "$cand_url -> HTTP 200 but not valid image header ($content_type)";
                 }
+            } else {
+                $attempt_logs[] = "$cand_url -> HTTP $http_code" . ($curl_err ? " ($curl_err)" : "");
             }
-
-            file_put_contents(FCPATH.'wa.txt', "[DEBUG DOWNLOAD CANDIDATE FAIL] $cand_url, HTTP: $http_code\n", FILE_APPEND);
         }
 
-        return false;
+        return ['success' => false, 'debug' => implode("\n", $attempt_logs)];
     }
 
 
