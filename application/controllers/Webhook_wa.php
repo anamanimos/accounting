@@ -432,9 +432,80 @@ class Webhook_wa extends CI_Controller {
 
     private function _parse_prompt($prompt)
     {
-        $lines = explode("\n", str_replace("\r", "", $prompt));
         $current_date = date('Y-m-d');
         $transactions = [];
+
+        // Direct JSON Array Support if Gemini returned JSON directly
+        $clean_json = '';
+        if (preg_match('/\[\s*\{[\s\S]*\}\s*\]/', $prompt, $matches)) {
+            $clean_json = $matches[0];
+        } elseif (strpos(trim($prompt), '[') === 0) {
+            $clean_json = $prompt;
+        }
+
+        if (!empty($clean_json)) {
+            $json_data = json_decode($clean_json, true);
+            if (!is_array($json_data)) {
+                // Try JSON auto-repair for truncated JSON
+                $repaired = preg_replace('/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/', '', $clean_json);
+                $repaired = rtrim($repaired, " \t\n\r,");
+                if (substr($repaired, -1) === '}') {
+                    $repaired .= ']';
+                } elseif (substr($repaired, -1) !== ']') {
+                    $repaired .= '}]';
+                }
+                $json_data = json_decode($repaired, true);
+            }
+
+            if (is_array($json_data) && count($json_data) > 0) {
+                foreach ($json_data as $item) {
+                    $raw_tgl   = $item['tanggal'] ?? date('Y-m-d');
+                    $pelanggan = !empty($item['pelanggan']) ? trim($item['pelanggan']) : 'Sevencols';
+                    $suplier   = !empty($item['suplier']) ? trim($item['suplier']) : 'Suplier Utama';
+                    $deskripsi = !empty($item['deskripsi']) ? trim($item['deskripsi']) : 'Nota AI';
+                    $ukuran    = isset($item['ukuran']) ? trim((string)$item['ukuran']) : '1';
+                    $modal     = isset($item['modal']) ? (int) preg_replace('/[^\d]/', '', (string)$item['modal']) : 0;
+
+                    if (preg_match('/(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/', $raw_tgl, $m_tgl)) {
+                        if (strlen($m_tgl[1]) == 4) {
+                            $current_date = sprintf("%04d-%02d-%02d", $m_tgl[1], $m_tgl[2], $m_tgl[3]);
+                        } else {
+                            $current_date = sprintf("%04d-%02d-%02d", $m_tgl[3], $m_tgl[2], $m_tgl[1]);
+                        }
+                    }
+
+                    $harga_jual = 0;
+                    $mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
+                    $harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
+                    preg_match_all('/\d+/', $ukuran, $matches_uk);
+                    $panjang = (!empty($matches_uk[0])) ? (int) end($matches_uk[0]) : 0;
+                    $harga_jual = $panjang * $harga_per_cm;
+                    if ($harga_jual === 0 && $modal > 0) {
+                        $harga_jual = $modal;
+                    }
+
+                    $ket = "$pelanggan - $suplier - $deskripsi - $ukuran";
+                    $rek_inventory_or_ap = '118';
+                    if (stripos($suplier, 'luar(p.riyadi)') !== false) {
+                        $rek_inventory_or_ap = '213';
+                    }
+
+                    $transactions[] = [
+                        'tgl' => $current_date,
+                        'ket' => $ket,
+                        'harga_jual' => $harga_jual,
+                        'modal' => $modal,
+                        'rek_inventory_or_ap' => $rek_inventory_or_ap
+                    ];
+                }
+                if (!empty($transactions)) {
+                    return $transactions;
+                }
+            }
+        }
+
+        // Line by line fallback
+        $lines = explode("\n", str_replace("\r", "", $prompt));
         
         foreach ($lines as $line) {
             $line = trim($line);

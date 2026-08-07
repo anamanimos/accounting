@@ -506,7 +506,7 @@ Aturannya:
             ],
             "generationConfig" => [
                 "temperature" => 0.1,
-                "maxOutputTokens" => 800
+                "maxOutputTokens" => 4096
             ]
         ];
 
@@ -546,6 +546,18 @@ Aturannya:
         $json_data = json_decode($clean_json, true);
         if (!is_array($json_data)) {
             $json_data = json_decode($generated_text, true);
+        }
+
+        // Repair partial/truncated JSON array if needed
+        if (!is_array($json_data) && strpos($generated_text, '[') !== false) {
+            $repaired_json = preg_replace('/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/', '', $generated_text);
+            $repaired_json = rtrim($repaired_json, " \t\n\r,");
+            if (substr($repaired_json, -1) === '}') {
+                $repaired_json .= ']';
+            } elseif (substr($repaired_json, -1) !== ']') {
+                $repaired_json .= '}]';
+            }
+            $json_data = json_decode($repaired_json, true);
         }
 
         if (is_array($json_data) && count($json_data) > 0) {
