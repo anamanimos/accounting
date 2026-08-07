@@ -451,7 +451,7 @@ Aturannya:
         $generated_text = preg_replace('/```/i', '', $generated_text);
         $generated_text = trim($generated_text);
 
-        return $this->format_json_to_legacy($generated_text);
+        return $this->format_json_to_legacy($generated_text, $nama_order);
     }
 
     /**
@@ -518,28 +518,93 @@ Aturannya:
         $generated_text = preg_replace('/```/i', '', $generated_text);
         $generated_text = trim($generated_text);
 
-        return $this->format_json_to_legacy($generated_text);
+        return $this->format_json_to_legacy($generated_text, $nama_order);
     }
 
     /**
-     * Parse JSON output to legacy dash-separated lines for journal builder
+     * Parse JSON output or raw text to legacy dash-separated lines for journal builder
      */
-    protected function format_json_to_legacy($generated_text) {
-        $json_data = json_decode($generated_text, true);
+    protected function format_json_to_legacy($generated_text, $nama_order = 'Nota AI') {
+        // 1. Try to extract JSON array using Regex
+        $clean_json = '';
+        if (preg_match('/\[\s*\{[\s\S]*\}\s*\]/', $generated_text, $matches)) {
+            $clean_json = $matches[0];
+        } else {
+            $clean_json = $generated_text;
+        }
+
+        $json_data = json_decode($clean_json, true);
+        if (!is_array($json_data)) {
+            $json_data = json_decode($generated_text, true);
+        }
+
         if (is_array($json_data) && count($json_data) > 0) {
-            $tanggal = $json_data[0]['tanggal'] ?? date('d - m - Y');
-            $tanggal = str_replace('-', ' - ', str_replace(' - ', '-', $tanggal));
-            
-            $output_lines = [$tanggal];
+            $raw_tgl = $json_data[0]['tanggal'] ?? date('d - m - Y');
+            $formatted_date = date('d - m - Y');
+
+            // Format date to DD - MM - YYYY
+            if (preg_match('/(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/', $raw_tgl, $m_tgl)) {
+                if (strlen($m_tgl[1]) == 4) {
+                    $formatted_date = sprintf("%02d - %02d - %04d", $m_tgl[3], $m_tgl[2], $m_tgl[1]);
+                } else {
+                    $formatted_date = sprintf("%02d - %02d - %04d", $m_tgl[1], $m_tgl[2], $m_tgl[3]);
+                }
+            }
+
+            $output_lines = [$formatted_date];
             foreach ($json_data as $item) {
-                $p = $item['pelanggan'] ?? 'Sevencols';
-                $s = $item['suplier'] ?? '';
-                $d = $item['deskripsi'] ?? '';
-                $u = $item['ukuran'] ?? 0;
-                $m = $item['modal'] ?? 0;
+                $p = !empty($item['pelanggan']) ? trim($item['pelanggan']) : 'Sevencols';
+                $s = !empty($item['suplier']) ? trim($item['suplier']) : 'Suplier Utama';
+                $d = !empty($item['deskripsi']) ? trim($item['deskripsi']) : $nama_order;
+                $u = isset($item['ukuran']) ? trim($item['ukuran']) : '0';
+                $m = isset($item['modal']) ? (int) preg_replace('/[^\d]/', '', (string)$item['modal']) : 0;
+
+                // Clean dash symbols from text fields to avoid breaking explode(' - ', $line)
+                $p = str_replace('-', ' ', $p);
+                $s = str_replace('-', ' ', $s);
+                $d = str_replace('-', ' ', $d);
+
                 $output_lines[] = "$p - $s - $d - $u - $m";
             }
-            $generated_text = implode("\n", $output_lines);
+            return ['success' => true, 'text' => implode("\n", $output_lines)];
+        }
+
+        // 2. Fallback parsing if JSON decoding fails
+        $lines = explode("\n", str_replace("\r", "", $generated_text));
+        $formatted_date = date('d - m - Y');
+        $output_lines = [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) continue;
+
+            if (preg_match('/(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})/', $line, $m_tgl)) {
+                $formatted_date = sprintf("%02d - %02d - %04d", $m_tgl[1], $m_tgl[2], $m_tgl[3]);
+                continue;
+            }
+
+            if (strpos($line, '-') !== false || strpos($line, '|') !== false) {
+                $parts = preg_split('/[\-\|]/', $line);
+                $clean_parts = array_map('trim', $parts);
+                if (count($clean_parts) >= 4) {
+                    $p = $clean_parts[0] ?: 'Sevencols';
+                    $s = $clean_parts[1] ?: 'Suplier Utama';
+                    $d = $clean_parts[2] ?: $nama_order;
+                    $u = preg_replace('/[^\d]/', '', $clean_parts[3]) ?: '1';
+                    $m = isset($clean_parts[4]) ? (int) preg_replace('/[^\d]/', '', $clean_parts[4]) : 0;
+
+                    $p = str_replace('-', ' ', $p);
+                    $s = str_replace('-', ' ', $s);
+                    $d = str_replace('-', ' ', $d);
+
+                    $output_lines[] = "$p - $s - $d - $u - $m";
+                }
+            }
+        }
+
+        if (!empty($output_lines)) {
+            array_unshift($output_lines, $formatted_date);
+            return ['success' => true, 'text' => implode("\n", $output_lines)];
         }
 
         return ['success' => true, 'text' => $generated_text];
