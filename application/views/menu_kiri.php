@@ -46,6 +46,9 @@ $level = $this->session->userdata('level');
             <li data-options="iconCls:'icon-surat_keluar'">
                 <a href="<?php echo base_url();?>jurnal_penyesuaian">Jurnal Penyesuaian</a>
             </li>
+            <li data-options="iconCls:'icon-tip'">
+                <a href="<?php echo base_url();?>settings">Pengaturan (Settings)</a>
+            </li>
         </ul>
     </div>
     </div>

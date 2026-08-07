@@ -395,6 +395,53 @@ class App_Model extends CI_Model
 			header('location:' . base_url() . 'login');
 		}
 	}
+
+	// Methods for settings key-value management
+	public function get_setting($key, $default = '')
+	{
+		if (!$this->db->table_exists('settings')) {
+			return $default;
+		}
+		$q = $this->db->get_where('settings', array('key' => $key));
+		if ($q->num_rows() > 0) {
+			return $q->row()->value;
+		}
+		return $default;
+	}
+
+	public function set_setting($key, $value)
+	{
+		if (!$this->db->table_exists('settings')) {
+			$this->db->query("CREATE TABLE IF NOT EXISTS `settings` (
+				`key` VARCHAR(100) NOT NULL PRIMARY KEY,
+				`value` TEXT NULL,
+				`updated_at` DATETIME NULL
+			) ENGINE=InnoDB DEFAULT CHARSET=utf8;");
+		}
+		$q = $this->db->get_where('settings', array('key' => $key));
+		if ($q->num_rows() > 0) {
+			$this->db->where('key', $key);
+			$this->db->update('settings', array('value' => $value, 'updated_at' => date('Y-m-d H:i:s')));
+		} else {
+			$this->db->insert('settings', array('key' => $key, 'value' => $value, 'updated_at' => date('Y-m-d H:i:s')));
+		}
+	}
+
+	public function get_all_settings()
+	{
+		if (!$this->db->table_exists('settings')) {
+			return array();
+		}
+		return $this->db->order_by('key', 'ASC')->get('settings')->result();
+	}
+
+	public function delete_setting($key)
+	{
+		if ($this->db->table_exists('settings')) {
+			$this->db->where('key', $key);
+			$this->db->delete('settings');
+		}
+	}
 }
 	
 /* End of file app_model.php */
