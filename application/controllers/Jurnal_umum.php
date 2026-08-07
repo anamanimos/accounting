@@ -150,8 +150,43 @@ class Jurnal_umum extends CI_Controller {
 		$transactions = [];
 		
 		foreach ($lines as $line) {
-			$line = trim($line);
-			if (empty($line)) continue;
+			$clean_line = trim($line, " \t\n\r\0\x0B*_~\\");
+			if (empty($clean_line)) continue;
+
+			// 0. Cek Format PE (Cetak DTF 557CM = Rp 139.250)
+			if (preg_match('/^(.*?)\s*(\d+)\s*(?:CM|cm)?\s*=\s*(?:Rp|rp)?\s*([\d\.,]+)$/i', $clean_line, $m)) {
+				$deskripsi = trim($m[1]);
+				if (empty($deskripsi)) {
+					$deskripsi = 'Cetak DTF';
+				}
+				$ukuran = trim($m[2]);
+				$modal_str = str_replace(['.', ','], '', trim($m[3]));
+				$modal = (int) preg_replace('/[^\d]/', '', $modal_str);
+
+				$pelanggan = 'Sevencols';
+				$suplier   = 'PE';
+
+				$harga_jual = 0;
+				$mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
+				$harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
+				$panjang = (int) $ukuran;
+				$harga_jual = $panjang * $harga_per_cm;
+				if ($harga_jual === 0 && $modal > 0) {
+					$harga_jual = $modal;
+				}
+
+				$ket = "$pelanggan - $suplier - $deskripsi - $ukuran";
+				$rek_inventory_or_ap = '118';
+
+				$transactions[] = [
+					'tgl' => $current_date,
+					'ket' => $ket,
+					'harga_jual' => $harga_jual,
+					'modal' => $modal,
+					'rek_inventory_or_ap' => $rek_inventory_or_ap
+				];
+				continue;
+			}
 
 			// 1. Cek Tanggal (DD - MM - YYYY)
 			if (preg_match('/^(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{4})$/', $line, $matches)) {

@@ -430,9 +430,72 @@ class Webhook_wa extends CI_Controller {
 
 
 
+    private function _parse_pe_text($prompt)
+    {
+        $lines = explode("\n", str_replace("\r", "", $prompt));
+        $current_date = date('Y-m-d');
+        $transactions = [];
+
+        if (preg_match('/(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/', $prompt, $matches)) {
+            if (strlen($matches[1]) == 4) {
+                $current_date = sprintf("%04d-%02d-%02d", $matches[1], $matches[2], $matches[3]);
+            } else {
+                $current_date = sprintf("%04d-%02d-%02d", $matches[3], $matches[2], $matches[1]);
+            }
+        }
+
+        foreach ($lines as $line) {
+            $clean_line = trim($line, " \t\n\r\0\x0B*_~\\");
+            if (empty($clean_line)) continue;
+
+            // Pattern: Cetak DTF 557CM = Rp 139.250 or 557CM = Rp 139.250 or Cetak DTF 557 CM = Rp 139.250
+            if (preg_match('/^(.*?)\s*(\d+)\s*(?:CM|cm)?\s*=\s*(?:Rp|rp)?\s*([\d\.,]+)$/i', $clean_line, $m)) {
+                $deskripsi = trim($m[1]);
+                if (empty($deskripsi)) {
+                    $deskripsi = 'Cetak DTF';
+                }
+                $ukuran = trim($m[2]);
+                $modal_str = str_replace(['.', ','], '', trim($m[3]));
+                $modal = (int) preg_replace('/[^\d]/', '', $modal_str);
+
+                $pelanggan = 'Sevencols';
+                $suplier   = 'PE';
+
+                $harga_jual = 0;
+                $mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
+                $harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
+                $panjang = (int) $ukuran;
+                $harga_jual = $panjang * $harga_per_cm;
+                if ($harga_jual === 0 && $modal > 0) {
+                    $harga_jual = $modal;
+                }
+
+                $ket = "$pelanggan - $suplier - $deskripsi - $ukuran";
+                $rek_inventory_or_ap = '118';
+
+                $transactions[] = [
+                    'tgl' => $current_date,
+                    'ket' => $ket,
+                    'harga_jual' => $harga_jual,
+                    'modal' => $modal,
+                    'rek_inventory_or_ap' => $rek_inventory_or_ap
+                ];
+            }
+        }
+
+        return $transactions;
+    }
+
     private function _parse_prompt($prompt)
     {
         $current_date = date('Y-m-d');
+        
+        // 0. Check PE Order Format (Vendor PE hardcoded)
+        $pe_trxs = $this->_parse_pe_text($prompt);
+        if (!empty($pe_trxs)) {
+            return $pe_trxs;
+        }
+
         $transactions = [];
 
         // Direct JSON Array Support if Gemini returned JSON directly
