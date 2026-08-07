@@ -355,24 +355,73 @@ class Webhook_wa extends CI_Controller {
 
     private function _download_and_base64($url)
     {
-        $username  = $this->_get_wa_setting('wa_gateway_username', 'admin');
-        $password  = $this->_get_wa_setting('wa_gateway_password', 'admin');
-        $device_id = $this->_get_wa_setting('wa_device_id', 'erp-damaijaya');
+        $username    = $this->_get_wa_setting('wa_gateway_username', 'admin');
+        $password    = $this->_get_wa_setting('wa_gateway_password', 'admin');
+        $device_id   = $this->_get_wa_setting('wa_device_id', 'erp-damaijaya');
+        $gateway_url = rtrim($this->_get_wa_setting('wa_gateway_url', 'https://wag.nams.my.id'), '/');
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'X-Device-Id: ' . $device_id,
-            'Authorization: Basic ' . base64_encode($username . ':' . $password)
-        ]);
-        $data = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $raw_path = $url;
+        $candidates = [];
 
-        if ($http_code === 200 && $data) {
-            return base64_encode($data);
+        if (strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0) {
+            $candidates[] = $url;
+            $parsed_path = ltrim(parse_url($url, PHP_URL_PATH), '/');
+            if (!empty($parsed_path)) {
+                $raw_path = $parsed_path;
+            }
         }
+
+        $clean_path = ltrim($raw_path, '/');
+        if (!empty($clean_path)) {
+            $candidates[] = $gateway_url . '/' . $clean_path;
+            $candidates[] = $gateway_url . '/app/media?path=' . urlencode($clean_path);
+            $candidates[] = $gateway_url . '/media?path=' . urlencode($clean_path);
+            $candidates[] = $gateway_url . '/app/files/' . $clean_path;
+            $candidates[] = $gateway_url . '/files/' . $clean_path;
+        }
+
+        $candidates = array_unique($candidates);
+
+        foreach ($candidates as $cand_url) {
+            $ch = curl_init($cand_url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'X-Device-Id: ' . $device_id,
+                'Authorization: Basic ' . base64_encode($username . ':' . $password)
+            ]);
+            $data = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            curl_close($ch);
+
+            if ($http_code === 200 && !empty($data)) {
+                // Ignore HTML error pages
+                if (strpos($data, '<!DOCTYPE') !== false || strpos($data, '<html') !== false) {
+                    file_put_contents(FCPATH.'wa.txt', "[DEBUG DOWNLOAD FAIL HTML] $cand_url returned HTML page\n", FILE_APPEND);
+                    continue;
+                }
+
+                // Verify image header bytes
+                $header = substr($data, 0, 8);
+                $is_image = (
+                    substr($header, 0, 2) === "\xFF\xD8" || // JPEG
+                    substr($header, 0, 8) === "\x89PNG\r\n\x1a\n" || // PNG
+                    (substr($header, 0, 4) === "RIFF" && substr($data, 8, 4) === "WEBP") || // WEBP
+                    substr($header, 0, 4) === "%PDF" // PDF
+                );
+
+                if ($is_image || (is_string($content_type) && strpos($content_type, 'image/') !== false)) {
+                    file_put_contents(FCPATH.'wa.txt', "[DEBUG DOWNLOAD SUCCESS] $cand_url, Size: " . strlen($data) . " bytes\n", FILE_APPEND);
+                    return base64_encode($data);
+                }
+            }
+
+            file_put_contents(FCPATH.'wa.txt', "[DEBUG DOWNLOAD CANDIDATE FAIL] $cand_url, HTTP: $http_code\n", FILE_APPEND);
+        }
+
         return false;
     }
 
