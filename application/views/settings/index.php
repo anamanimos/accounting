@@ -135,6 +135,9 @@
                         <button type="button" class="btn btn-light-info fw-bold" id="btnTestVision" onclick="testVisionAPI()">
                             <i class="ki-outline ki-scan-barcode fs-2 me-1"></i> Test Cloud Vision OCR API
                         </button>
+                        <button type="button" class="btn btn-light-warning fw-bold" id="btnListModels" onclick="listModelsAPI()">
+                            <i class="ki-outline ki-magnifier fs-2 me-1"></i> Cek Daftar Model Aktif
+                        </button>
                     </div>
 
                     <!-- Output Box -->
@@ -233,6 +236,48 @@ function testVisionAPI() {
         },
         error: function(xhr) {
             $('#btnTestVision').removeClass('disabled');
+            $('#testStatusBadge').attr('class', 'badge badge-light-danger me-3 fs-6').text('ERROR');
+            $('#testStatusTitle').text('Terjadi Kesalahan Server / Koneksi');
+            $('#testResultDetails').text(xhr.responseText || 'Request gagal dijalankan.');
+        }
+    });
+}
+
+function listModelsAPI() {
+    var geminiKey = $('#gemini_api_key').val().trim();
+    var googleKey = $('#google_api_key').val().trim();
+    
+    $('#testResultBox').slideDown();
+    $('#testStatusBadge').attr('class', 'badge badge-light-warning me-3 fs-6').text('Memproses...');
+    $('#testStatusTitle').text('Memeriksa Daftar Model Aktif di Google API...');
+    $('#testResultDetails').text('Mengirim GET request ke /models...');
+    
+    $('#btnListModels').addClass('disabled');
+
+    $.ajax({
+        url: baseUrl + 'settings/list_models',
+        type: 'POST',
+        data: { gemini_api_key: geminiKey, google_api_key: googleKey },
+        dataType: 'json',
+        success: function(res) {
+            $('#btnListModels').removeClass('disabled');
+            if (res.success && res.models) {
+                $('#testStatusBadge').attr('class', 'badge badge-light-success me-3 fs-6').text('BERHASIL (' + res.models.length + ' Model)');
+                $('#testStatusTitle').text('Daftar Model yang Didukung API Key Anda (' + res.endpoint + ')');
+                
+                var out = "Daftar Model yang Aktif & Mendukung generateContent:\n\n";
+                res.models.forEach(function(m, idx) {
+                    out += (idx + 1) + ". " + m.name + " (" + m.displayName + ")\n";
+                });
+                $('#testResultDetails').text(out);
+            } else {
+                $('#testStatusBadge').attr('class', 'badge badge-light-danger me-3 fs-6').text('GAGAL');
+                $('#testStatusTitle').text('Gagal Mengambil Daftar Model');
+                $('#testResultDetails').text("Pesan Error:\n" + (res.error || 'Terjadi kesalahan') + (res.debug ? "\n\nRaw Debug:\n" + res.debug : ""));
+            }
+        },
+        error: function(xhr) {
+            $('#btnListModels').removeClass('disabled');
             $('#testStatusBadge').attr('class', 'badge badge-light-danger me-3 fs-6').text('ERROR');
             $('#testStatusTitle').text('Terjadi Kesalahan Server / Koneksi');
             $('#testResultDetails').text(xhr.responseText || 'Request gagal dijalankan.');

@@ -52,24 +52,92 @@ class Gemini_ocr {
     }
 
     /**
+     * Get list of models supported by the provided API Key from Google API
+     */
+    public function get_available_models($custom_key = null) {
+        $api_key = !empty($custom_key) ? trim($custom_key) : $this->get_api_key();
+        if (empty($api_key)) {
+            return ['success' => false, 'error' => 'API Key belum diisi.'];
+        }
+
+        $endpoints = ['v1beta', 'v1'];
+        $found_models = [];
+        $last_code = 0;
+        $last_response = '';
+
+        foreach ($endpoints as $ver) {
+            $url = "https://generativelanguage.googleapis.com/" . $ver . "/models?key=" . $api_key;
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($http_code === 200) {
+                $data = json_decode($response, true);
+                if (isset($data['models']) && is_array($data['models'])) {
+                    foreach ($data['models'] as $m) {
+                        $name = str_replace('models/', '', $m['name'] ?? '');
+                        $methods = $m['supportedGenerationMethods'] ?? [];
+                        if (in_array('generateContent', $methods) && !empty($name)) {
+                            $found_models[] = [
+                                'name' => $name,
+                                'version' => $ver,
+                                'displayName' => $m['displayName'] ?? $name,
+                                'description' => $m['description'] ?? ''
+                            ];
+                        }
+                    }
+                }
+                if (!empty($found_models)) {
+                    return [
+                        'success' => true,
+                        'endpoint' => $ver,
+                        'models' => $found_models,
+                        'raw' => $response
+                    ];
+                }
+            } else {
+                $last_code = $http_code;
+                $last_response = $response;
+            }
+        }
+
+        return [
+            'success' => false,
+            'http_code' => $last_code,
+            'error' => 'Gagal mengambil daftar model dari Google API (HTTP ' . $last_code . ').',
+            'debug' => $last_response
+        ];
+    }
+
+    /**
      * Helper to call Gemini API trying multiple endpoints (v1beta, v1) and model candidates
      */
     protected function call_gemini_api($payload, $api_key, $primary_model = 'gemini-1.5-flash') {
         $endpoints = ['v1beta', 'v1'];
-        $models_to_try = array_unique([
+        $primary_model = str_replace('models/', '', trim($primary_model));
+
+        $models_to_try = array_unique(array_filter([
             $primary_model,
             'gemini-1.5-flash',
             'gemini-1.5-flash-latest',
             'gemini-2.0-flash',
             'gemini-2.0-flash-exp',
-            'gemini-1.5-pro'
-        ]);
+            'gemini-1.5-pro',
+            'gemini-1.5-flash-001',
+            'gemini-1.5-flash-002',
+            'gemini-1.0-pro'
+        ]));
 
         $last_response = '';
         $last_http_code = 0;
         $used_model = '';
         $used_endpoint = '';
 
+        // Phase 1: Try standard endpoints & models
         foreach ($endpoints as $ver) {
             foreach ($models_to_try as $model) {
                 $url = "https://generativelanguage.googleapis.com/" . $ver . "/models/" . $model . ":generateContent?key=" . $api_key;
@@ -101,6 +169,49 @@ class Gemini_ocr {
                 $used_model = $model;
                 $used_endpoint = $ver;
             }
+        }
+
+        // Phase 2: Dynamically discover models supported by this specific API Key
+        $model_list_res = $this->get_available_models($api_key);
+        if ($model_list_res['success'] && !empty($model_list_res['models'])) {
+            $ver = $model_list_res['endpoint'];
+            foreach ($model_list_res['models'] as $m_info) {
+                $model = $m_info['name'];
+                $url = "https://generativelanguage.googleapis.com/" . $ver . "/models/" . $model . ":generateContent?key=" . $api_key;
+
+                $ch = curl_init($url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+                
+                $response = curl_exec($ch);
+                $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($http_code === 200) {
+                    return [
+                        'success' => true,
+                        'http_code' => 200,
+                        'endpoint' => $ver,
+                        'model' => $model,
+                        'response' => $response
+                    ];
+                }
+                $last_http_code = $http_code;
+                $last_response = $response;
+                $used_model = $model;
+            }
+        } elseif (!$model_list_res['success'] && !empty($model_list_res['debug'])) {
+            return [
+                'success' => false,
+                'http_code' => $model_list_res['http_code'],
+                'endpoint' => 'v1beta',
+                'model' => $primary_model,
+                'response' => $model_list_res['debug']
+            ];
         }
 
         return [

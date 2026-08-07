@@ -167,4 +167,24 @@ class Settings extends CI_Controller {
 		return $this->output->set_content_type('application/json')
 			->set_output(json_encode($res));
 	}
+
+	public function list_models()
+	{
+		if (empty($this->session->userdata('logged_in'))) {
+			return $this->output->set_content_type('application/json')
+				->set_status_header(401)
+				->set_output(json_encode(['status' => 'error', 'message' => 'Unauthorized']));
+		}
+
+		$key = trim($this->input->post('gemini_api_key'));
+		if (empty($key)) {
+			$key = trim($this->input->post('google_api_key'));
+		}
+
+		$this->load->library('gemini_ocr');
+		$res = $this->gemini_ocr->get_available_models($key);
+
+		return $this->output->set_content_type('application/json')
+			->set_output(json_encode($res));
+	}
 }
