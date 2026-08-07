@@ -388,15 +388,18 @@ class Webhook_wa extends CI_Controller {
             $line = trim($line);
             if (empty($line)) continue;
 
-            if (preg_match('/^(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{4})$/', $line, $matches)) {
-                $day = str_pad($matches[1], 2, "0", STR_PAD_LEFT);
-                $month = str_pad($matches[2], 2, "0", STR_PAD_LEFT);
-                $year = $matches[3];
-                $current_date = "$year-$month-$day";
+            // 1. Cek Tanggal (DD - MM - YYYY atau YYYY-MM-DD atau DD/MM/YYYY)
+            if (preg_match('/(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/', $line, $matches)) {
+                if (strlen($matches[1]) == 4) {
+                    $current_date = sprintf("%04d-%02d-%02d", $matches[1], $matches[2], $matches[3]);
+                } else {
+                    $current_date = sprintf("%04d-%02d-%02d", $matches[3], $matches[2], $matches[1]);
+                }
                 continue;
             }
 
-            if (strpos($line, ' - ') !== false) {
+            // 2. Cek baris Transaksi
+            if (strpos($line, '-') !== false || strpos($line, '|') !== false) {
                 $harga_jual = 0;
                 $left_part = $line;
 
@@ -408,27 +411,30 @@ class Webhook_wa extends CI_Controller {
                     $left_part = trim($parts[0]);
                 }
                 
-                $dash_parts = explode(' - ', $left_part);
+                $dash_parts = preg_split('/\s*-\s*/', $left_part);
                 
                 if (count($dash_parts) >= 4) {
-                    $pelanggan = trim($dash_parts[0], " -");
-                    $suplier = trim($dash_parts[1], " -");
-                    $deskripsi = trim($dash_parts[2], " -");
-                    $ukuran = trim($dash_parts[3], " -");
+                    $pelanggan = trim($dash_parts[0]);
+                    $suplier   = trim($dash_parts[1]);
+                    $deskripsi = trim($dash_parts[2]);
+                    $ukuran    = trim($dash_parts[3]);
                     
                     $modal = 0;
                     if (isset($dash_parts[4])) {
-                        $modal_str = trim($dash_parts[4], " -");
+                        $modal_str = trim($dash_parts[4]);
                         $modal_str = str_replace(['.', ','], '', $modal_str);
-                        $modal = (int) $modal_str;
+                        $modal = (int) preg_replace('/[^\d]/', '', $modal_str);
                     }
                     
                     if ($harga_jual === 0) {
                         $mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
-                        $harga_per_cm = $mh ? $mh->harga_jual : 0;
+                        $harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
                         preg_match_all('/\d+/', $ukuran, $matches);
                         $panjang = (!empty($matches[0])) ? (int) end($matches[0]) : 0;
                         $harga_jual = $panjang * $harga_per_cm;
+                        if ($harga_jual === 0 && $modal > 0) {
+                            $harga_jual = $modal;
+                        }
                     }
 
                     $ket = "$pelanggan - $suplier - $deskripsi - $ukuran";

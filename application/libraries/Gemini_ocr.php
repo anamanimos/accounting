@@ -328,8 +328,18 @@ class Gemini_ocr {
             return ['success' => false, 'error' => 'Google Cloud / Gemini API Key belum disetel. Silakan atur di Halaman Settings atau .env.'];
         }
 
+        // Auto detect mime type from base64 binary header if not specified or default
+        if (!empty($base64_image)) {
+            $raw_bytes = base64_decode(substr($base64_image, 0, 32));
+            if (substr($raw_bytes, 0, 8) === "\x89PNG\r\n\x1a\n") {
+                $mime_type = 'image/png';
+            } elseif (substr($raw_bytes, 0, 4) === "RIFF" && substr($raw_bytes, 8, 4) === "WEBP") {
+                $mime_type = 'image/webp';
+            }
+        }
+
         $ocr_provider = 'gemini_flash';
-        $gemini_model = 'gemini-1.5-flash';
+        $gemini_model = 'gemini-2.5-flash';
 
         if (isset($this->CI->app_model) && method_exists($this->CI->app_model, 'get_setting')) {
             $ocr_provider = $this->CI->app_model->get_setting('ocr_provider', 'gemini_flash');
