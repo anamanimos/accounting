@@ -32,11 +32,17 @@ class Settings extends CI_Controller {
 		$d['alamat_instansi']= $this->config->item('alamat_instansi');
 
 		// Fetch all key-value settings
-		$d['all_settings']   = $this->app_model->get_all_settings();
-		$d['gemini_api_key'] = $this->app_model->get_setting('gemini_api_key', '');
-		$d['google_api_key'] = $this->app_model->get_setting('google_api_key', '');
-		$d['ocr_provider']   = $this->app_model->get_setting('ocr_provider', 'gemini_flash');
-		$d['gemini_model']   = $this->app_model->get_setting('gemini_model', 'gemini-2.5-flash');
+		$d['all_settings']        = $this->app_model->get_all_settings();
+		$d['gemini_api_key']      = $this->app_model->get_setting('gemini_api_key', '');
+		$d['google_api_key']      = $this->app_model->get_setting('google_api_key', '');
+		$d['ocr_provider']        = $this->app_model->get_setting('ocr_provider', 'gemini_flash');
+		$d['gemini_model']        = $this->app_model->get_setting('gemini_model', 'gemini-2.5-flash');
+
+		$d['wa_gateway_url']      = $this->app_model->get_setting('wa_gateway_url', 'https://wag.nams.my.id');
+		$d['wa_device_id']        = $this->app_model->get_setting('wa_device_id', 'erp-damaijaya');
+		$d['wa_group_id']         = $this->app_model->get_setting('wa_group_id', '120363426581172416@g.us');
+		$d['wa_gateway_username'] = $this->app_model->get_setting('wa_gateway_username', 'admin');
+		$d['wa_gateway_password'] = $this->app_model->get_setting('wa_gateway_password', 'admin');
 
 		$d['content'] = 'settings/index';
 		$this->load->view('templates/main', $d);
@@ -55,6 +61,12 @@ class Settings extends CI_Controller {
 		$ocr_provider   = trim($this->input->post('ocr_provider'));
 		$gemini_model   = trim($this->input->post('gemini_model'));
 
+		$wa_gateway_url      = rtrim(trim($this->input->post('wa_gateway_url')), '/');
+		$wa_device_id        = trim($this->input->post('wa_device_id'));
+		$wa_group_id         = trim($this->input->post('wa_group_id'));
+		$wa_gateway_username = trim($this->input->post('wa_gateway_username'));
+		$wa_gateway_password = trim($this->input->post('wa_gateway_password'));
+
 		// Fallback if one is empty
 		if (empty($google_api_key)) {
 			$google_api_key = $gemini_api_key;
@@ -67,6 +79,12 @@ class Settings extends CI_Controller {
 		$this->app_model->set_setting('google_api_key', $google_api_key);
 		$this->app_model->set_setting('ocr_provider', $ocr_provider);
 		$this->app_model->set_setting('gemini_model', $gemini_model);
+
+		if (!empty($wa_gateway_url)) $this->app_model->set_setting('wa_gateway_url', $wa_gateway_url);
+		if (!empty($wa_device_id)) $this->app_model->set_setting('wa_device_id', $wa_device_id);
+		if (!empty($wa_group_id)) $this->app_model->set_setting('wa_group_id', $wa_group_id);
+		if (!empty($wa_gateway_username)) $this->app_model->set_setting('wa_gateway_username', $wa_gateway_username);
+		if (!empty($wa_gateway_password)) $this->app_model->set_setting('wa_gateway_password', $wa_gateway_password);
 
 		// If extra dynamic key-value pairs are sent
 		$keys   = $this->input->post('kv_key');

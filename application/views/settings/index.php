@@ -106,6 +106,43 @@
                             </div>
                         </div>
 
+                        <div class="separator separator-dashed my-8"></div>
+
+                        <div class="mb-5">
+                            <h4 class="fw-bold text-gray-800 m-0">
+                                <i class="ki-outline ki-whatsapp fs-2 text-success me-2"></i> Konfigurasi WhatsApp Gateway
+                            </h4>
+                            <span class="text-muted fs-7">Pengaturan server WA Gateway untuk bot penerima nota</span>
+                        </div>
+
+                        <div class="mb-7">
+                            <label class="form-label required fw-bold text-gray-800 fs-6">URL Server WA Gateway</label>
+                            <input type="text" name="wa_gateway_url" value="<?php echo htmlspecialchars($wa_gateway_url); ?>" class="form-control form-control-solid" placeholder="https://wag.nams.my.id" />
+                            <div class="form-text text-muted mt-1">Default: <code>https://wag.nams.my.id</code></div>
+                        </div>
+
+                        <div class="row mb-7">
+                            <div class="col-md-6 mb-5 mb-md-0">
+                                <label class="form-label required fw-bold text-gray-800 fs-6">Device ID (Sesi Perangkat)</label>
+                                <input type="text" name="wa_device_id" value="<?php echo htmlspecialchars($wa_device_id); ?>" class="form-control form-control-solid" placeholder="erp-damaijaya" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label required fw-bold text-gray-800 fs-6">Target Group JID</label>
+                                <input type="text" name="wa_group_id" value="<?php echo htmlspecialchars($wa_group_id); ?>" class="form-control form-control-solid" placeholder="120363426581172416@g.us" />
+                            </div>
+                        </div>
+
+                        <div class="row mb-7">
+                            <div class="col-md-6 mb-5 mb-md-0">
+                                <label class="form-label fw-bold text-gray-800 fs-6">Username Auth Gateway</label>
+                                <input type="text" name="wa_gateway_username" value="<?php echo htmlspecialchars($wa_gateway_username); ?>" class="form-control form-control-solid" placeholder="admin" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-gray-800 fs-6">Password Auth Gateway</label>
+                                <input type="password" name="wa_gateway_password" value="<?php echo htmlspecialchars($wa_gateway_password); ?>" class="form-control form-control-solid" placeholder="admin" />
+                            </div>
+                        </div>
+
                         <div class="d-flex justify-content-end pt-5">
                             <button type="submit" class="btn btn-primary">
                                 <i class="ki-outline ki-check-circle fs-2"></i> Simpan Pengaturan

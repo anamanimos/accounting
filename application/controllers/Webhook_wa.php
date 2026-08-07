@@ -6,10 +6,31 @@ class Webhook_wa extends CI_Controller {
     {
         parent::__construct();
         $this->load->database();
+        $this->load->model('app_model');
         // Ensure Env class is loaded
         if (!class_exists('Env') && file_exists(FCPATH . 'application/config/env.php')) {
             require_once FCPATH . 'application/config/env.php';
         }
+    }
+
+    private function _get_wa_setting($key, $default = '')
+    {
+        $val = '';
+        if (isset($this->app_model) && method_exists($this->app_model, 'get_setting')) {
+            $val = $this->app_model->get_setting($key, '');
+        }
+        if (empty($val) && class_exists('Env')) {
+            $env_map = [
+                'wa_gateway_url'      => 'WA_GATEWAY_URL',
+                'wa_gateway_username' => 'WA_GATEWAY_USERNAME',
+                'wa_gateway_password' => 'WA_GATEWAY_PASSWORD',
+                'wa_device_id'        => 'WA_DEVICE_ID',
+                'wa_group_id'         => 'WA_GROUP_ID'
+            ];
+            $env_key = $env_map[$key] ?? strtoupper($key);
+            $val = Env::get($env_key);
+        }
+        return !empty($val) ? trim($val) : $default;
     }
 
     public function index()
@@ -69,7 +90,7 @@ class Webhook_wa extends CI_Controller {
         }
 
         $chat_id = $payload['chat_id'] ?? '';
-        $target_group = Env::get('WA_GROUP_ID') ?: '120363426581172416@g.us';
+        $target_group = $this->_get_wa_setting('wa_group_id', '120363426581172416@g.us');
 
         // Hanya proses pesan dari grup target
         if ($chat_id !== $target_group) {
@@ -209,7 +230,7 @@ class Webhook_wa extends CI_Controller {
                 fastcgi_finish_request();
             }
 
-            $gateway_url = rtrim(Env::get('WA_GATEWAY_URL') ?: 'https://wag.anam.ch', '/');
+            $gateway_url = rtrim($this->_get_wa_setting('wa_gateway_url', 'https://wag.nams.my.id'), '/');
             $image_url = (strpos($image_path_to_process, 'http') === 0) ? $image_path_to_process : $gateway_url . '/' . $image_path_to_process;
             
             $base64_image = $this->_download_and_base64($image_url);
@@ -298,10 +319,10 @@ class Webhook_wa extends CI_Controller {
 
     private function _send_message($phone, $message, $reply_to_id = null)
     {
-        $gateway_url = rtrim(Env::get('WA_GATEWAY_URL') ?: 'https://wag.anam.ch', '/');
-        $username = Env::get('WA_GATEWAY_USERNAME') ?: 'admin';
-        $password = Env::get('WA_GATEWAY_PASSWORD') ?: 'admin';
-        $device_id = Env::get('WA_DEVICE_ID') ?: 'erp-damaijaya';
+        $gateway_url = rtrim($this->_get_wa_setting('wa_gateway_url', 'https://wag.nams.my.id'), '/');
+        $username    = $this->_get_wa_setting('wa_gateway_username', 'admin');
+        $password    = $this->_get_wa_setting('wa_gateway_password', 'admin');
+        $device_id   = $this->_get_wa_setting('wa_device_id', 'erp-damaijaya');
 
         $payload = [
             'phone' => $phone,
@@ -332,9 +353,9 @@ class Webhook_wa extends CI_Controller {
 
     private function _download_and_base64($url)
     {
-        $username = Env::get('WA_GATEWAY_USERNAME') ?: 'admin';
-        $password = Env::get('WA_GATEWAY_PASSWORD') ?: 'admin';
-        $device_id = Env::get('WA_DEVICE_ID') ?: 'erp-damaijaya';
+        $username  = $this->_get_wa_setting('wa_gateway_username', 'admin');
+        $password  = $this->_get_wa_setting('wa_gateway_password', 'admin');
+        $device_id = $this->_get_wa_setting('wa_device_id', 'erp-damaijaya');
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

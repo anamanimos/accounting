@@ -21,11 +21,22 @@
     <div id="kt_app_content" class="app-content flex-column-fluid">
         <div id="kt_app_content_container" class="app-container container-fluid">
             
-            <div class="card shadow-sm">
+            <?php if ($this->session->flashdata('success')): ?>
+                <div class="alert alert-success d-flex align-items-center p-5 mb-7">
+                    <i class="ki-outline ki-check-circle fs-2hx text-success me-4"></i>
+                    <div class="d-flex flex-column">
+                        <h4 class="mb-1 text-success">Berhasil</h4>
+                        <span><?= $this->session->flashdata('success') ?></span>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <!--begin::Card - Status Connection-->
+            <div class="card shadow-sm mb-8">
                 <div class="card-header border-0 pt-5">
                     <h3 class="card-title align-items-start flex-column">
                         <span class="card-label fw-bold text-gray-900">Status Koneksi WA Gateway</span>
-                        <span class="text-muted mt-1 fw-semibold fs-7">Device ID: <strong><?= htmlspecialchars($device_id) ?></strong></span>
+                        <span class="text-muted mt-1 fw-semibold fs-7">Device ID: <strong><?= htmlspecialchars($device_id) ?></strong> | Server: <strong><?= htmlspecialchars($gateway_url) ?></strong></span>
                     </h3>
                     <div class="card-toolbar">
                         <a href="<?= base_url('whatsapp') ?>" class="btn btn-sm btn-light-primary">
@@ -57,7 +68,6 @@
                                 <?php if (isset($qrData['qr_link'])): ?>
                                     <img src="<?= $qrData['qr_link'] ?>" alt="QR Code" class="img-thumbnail border-primary" style="max-width: 300px;">
                                 <?php elseif (isset($qrData['qr_code'])): ?>
-                                    <!-- Jika berbentuk text base64 qr -->
                                     <div class="p-4 bg-white d-inline-block rounded shadow-sm">
                                         <div id="qrcode"></div>
                                         <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -84,13 +94,75 @@
                         <div class="alert alert-danger d-flex align-items-center p-5 mb-0">
                             <i class="ki-outline ki-shield-cross fs-2hx text-danger me-4"></i>
                             <div class="d-flex flex-column">
-                                <h4 class="mb-1 text-danger">Gagal Menghubungi Gateway</h4>
-                                <span>Pastikan <code>WA_GATEWAY_URL</code>, <code>WA_GATEWAY_USERNAME</code>, dan <code>WA_GATEWAY_PASSWORD</code> sudah diatur dengan benar di file <code>.env</code>.</span>
+                                <h4 class="mb-1 text-danger">Gagal Menghubungi Server WA Gateway</h4>
+                                <span>Server di <code><?= htmlspecialchars($gateway_url) ?></code> tidak merespon. Harap periksa URL Server atau kredensial pada form di bawah.</span>
                             </div>
                         </div>
                     <?php endif; ?>
                 </div>
             </div>
+            <!--end::Card - Status Connection-->
+
+            <!--begin::Card - Form Configuration-->
+            <div class="card shadow-sm mb-8">
+                <div class="card-header border-0 pt-6">
+                    <div class="card-title">
+                        <div class="d-flex align-items-center position-relative my-1">
+                            <i class="ki-outline ki-setting-2 fs-2x text-primary me-3"></i>
+                            <div>
+                                <h3 class="fw-bold text-gray-900 m-0">Konfigurasi Server WhatsApp Gateway</h3>
+                                <span class="text-muted fs-7">Pengaturan server gateway, device ID, dan grup target bot</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body pt-0">
+                    <form action="<?= base_url('whatsapp/simpan') ?>" method="post">
+                        
+                        <div class="mb-7">
+                            <label class="form-label required fw-bold text-gray-800 fs-6">URL WA Gateway Server</label>
+                            <input type="text" name="wa_gateway_url" value="<?= htmlspecialchars($gateway_url) ?>" class="form-control form-control-solid" placeholder="https://wag.nams.my.id" required />
+                            <div class="form-text text-muted mt-2">
+                                <span class="badge badge-light-primary me-1">Default</span>
+                                Server Gateway Utama: <code>https://wag.nams.my.id</code>
+                            </div>
+                        </div>
+
+                        <div class="row mb-7">
+                            <div class="col-md-6 mb-5 mb-md-0">
+                                <label class="form-label required fw-bold text-gray-800 fs-6">Device ID (Sesi Perangkat)</label>
+                                <input type="text" name="wa_device_id" value="<?= htmlspecialchars($device_id) ?>" class="form-control form-control-solid" placeholder="erp-damaijaya" required />
+                                <div class="form-text text-muted mt-1">ID unik sesi WhatsApp di server gateway.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label required fw-bold text-gray-800 fs-6">Target Group JID</label>
+                                <input type="text" name="wa_group_id" value="<?= htmlspecialchars($group_id) ?>" class="form-control form-control-solid" placeholder="120363426581172416@g.us" required />
+                                <div class="form-text text-muted mt-1">ID Grup WhatsApp untuk memproses nota AI.</div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-7">
+                            <div class="col-md-6 mb-5 mb-md-0">
+                                <label class="form-label fw-bold text-gray-800 fs-6">Username Basic Auth Gateway</label>
+                                <input type="text" name="wa_gateway_username" value="<?= htmlspecialchars($username) ?>" class="form-control form-control-solid" placeholder="admin" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-gray-800 fs-6">Password Basic Auth Gateway</label>
+                                <input type="password" name="wa_gateway_password" value="<?= htmlspecialchars($password) ?>" class="form-control form-control-solid" placeholder="admin" />
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end pt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="ki-outline ki-check-circle fs-2"></i> Simpan Pengaturan WA Gateway
+                            </button>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+            <!--end::Card - Form Configuration-->
 
         </div>
     </div>
