@@ -54,6 +54,7 @@ class Settings extends CI_Controller {
 		$gemini_model   = trim($this->input->post('gemini_model'));
 
 		$this->app_model->set_setting('google_api_key', $google_api_key);
+		$this->app_model->set_setting('gemini_api_key', $google_api_key);
 		$this->app_model->set_setting('ocr_provider', $ocr_provider);
 		$this->app_model->set_setting('gemini_model', $gemini_model);
 

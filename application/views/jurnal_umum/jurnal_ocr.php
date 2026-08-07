@@ -28,7 +28,7 @@
                 <i class="ki-outline ki-shield-cross fs-2hx text-danger me-4"></i>
                 <div class="d-flex flex-column">
                     <h4 class="mb-1 text-danger">Gemini API Key Belum Dikonfigurasi</h4>
-                    <span>Sistem tidak dapat menggunakan fitur AI. Harap tambahkan <code>GEMINI_API_KEY=kunci_anda</code> di file <code>.env</code> Anda.</span>
+                    <span>Sistem tidak dapat menggunakan fitur AI. Harap atur API Key di <a href="<?= base_url('settings') ?>" class="fw-bold text-danger text-decoration-underline">Halaman Settings</a>.</span>
                 </div>
             </div>
             <?php endif; ?>

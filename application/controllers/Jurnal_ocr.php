@@ -17,12 +17,8 @@ class Jurnal_ocr extends CI_Controller {
 			'email'        => $this->session->userdata('username') . '@accounting.test'
 		];
 
-        // Ensure Env class is loaded
-        if (!class_exists('Env') && file_exists(FCPATH . 'application/config/env.php')) {
-            require_once FCPATH . 'application/config/env.php';
-        }
-
-		$d['has_api_key'] = (class_exists('Env') && !empty(Env::get('GEMINI_API_KEY')));
+        $this->load->library('gemini_ocr');
+		$d['has_api_key'] = !empty($this->gemini_ocr->get_api_key());
 
 		$d['content'] = 'jurnal_umum/jurnal_ocr';
 		$this->load->view('templates/main', $d);
@@ -36,16 +32,13 @@ class Jurnal_ocr extends CI_Controller {
                 ->set_output(json_encode(['status' => 'error', 'message' => 'Unauthorized']));
         }
 
-        if (!class_exists('Env') && file_exists(FCPATH . 'application/config/env.php')) {
-            require_once FCPATH . 'application/config/env.php';
-        }
-
-        $api_key = class_exists('Env') ? Env::get('GEMINI_API_KEY') : '';
+        $this->load->library('gemini_ocr');
+        $api_key = $this->gemini_ocr->get_api_key();
 
         if (empty($api_key)) {
             return $this->output->set_content_type('application/json')
                 ->set_status_header(400)
-                ->set_output(json_encode(['status' => 'error', 'message' => 'Gemini API Key belum disetel di file .env.']));
+                ->set_output(json_encode(['status' => 'error', 'message' => 'Gemini API Key belum disetel. Silakan atur di Halaman Settings.']));
         }
 
         $nama_order = $this->input->post('nama_order');
