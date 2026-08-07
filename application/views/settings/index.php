@@ -96,6 +96,42 @@
             </div>
             <!--end::Card-->
 
+            <!--begin::Card - Test API Connections-->
+            <div class="card shadow-sm mb-8">
+                <div class="card-header border-0 pt-6">
+                    <div class="card-title">
+                        <div class="d-flex align-items-center position-relative my-1">
+                            <i class="ki-outline ki-technology-4 fs-2x text-info me-3"></i>
+                            <div>
+                                <h3 class="fw-bold text-gray-900 m-0">Uji Coba & Testing API</h3>
+                                <span class="text-muted fs-7">Verifikasi langsung koneksi Google Gemini API dan Google Cloud Vision OCR</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body pt-0">
+                    <div class="d-flex flex-wrap gap-4 mb-6">
+                        <button type="button" class="btn btn-light-primary fw-bold" id="btnTestGemini" onclick="testGeminiAPI()">
+                            <i class="ki-outline ki-technology fs-2 me-1"></i> Test Gemini API Connection
+                        </button>
+                        <button type="button" class="btn btn-light-info fw-bold" id="btnTestVision" onclick="testVisionAPI()">
+                            <i class="ki-outline ki-scan-barcode fs-2 me-1"></i> Test Cloud Vision OCR API
+                        </button>
+                    </div>
+
+                    <!-- Output Box -->
+                    <div id="testResultBox" style="display:none;" class="p-5 rounded border border-dashed">
+                        <div class="d-flex align-items-center mb-3">
+                            <span id="testStatusBadge" class="badge me-3 fs-6"></span>
+                            <span id="testStatusTitle" class="fw-bold fs-5 text-gray-800"></span>
+                        </div>
+                        <pre id="testResultDetails" class="bg-dark text-light p-4 rounded fs-7" style="max-height:300px;overflow:auto;margin:0;"></pre>
+                    </div>
+                </div>
+            </div>
+            <!--end::Card-->
+
         </div>
     </div>
     <!--end::Content-->
@@ -110,5 +146,78 @@ function toggleKeyVisibility() {
     } else {
         field.type = "password";
     }
+}
+
+function testGeminiAPI() {
+    var key = $('#google_api_key').val().trim();
+    var model = $('select[name="gemini_model"]').val();
+    
+    $('#testResultBox').slideDown();
+    $('#testStatusBadge').attr('class', 'badge badge-light-warning me-3 fs-6').text('Memproses...');
+    $('#testStatusTitle').text('Menghubungi Google Gemini API (' + model + ')...');
+    $('#testResultDetails').text('Mengirim cURL ping request...');
+    
+    $('#btnTestGemini').addClass('disabled');
+
+    $.ajax({
+        url: baseUrl + 'settings/test_gemini',
+        type: 'POST',
+        data: { google_api_key: key, gemini_model: model },
+        dataType: 'json',
+        success: function(res) {
+            $('#btnTestGemini').removeClass('disabled');
+            if (res.success) {
+                $('#testStatusBadge').attr('class', 'badge badge-light-success me-3 fs-6').text('BERHASIL');
+                $('#testStatusTitle').text(res.message);
+                $('#testResultDetails').text("Respon dari Gemini API:\n" + res.response);
+            } else {
+                $('#testStatusBadge').attr('class', 'badge badge-light-danger me-3 fs-6').text('GAGAL');
+                $('#testStatusTitle').text('Gagal Terhubung ke Gemini API');
+                $('#testResultDetails').text("Pesan Error:\n" + res.error + (res.debug ? "\n\nRaw Debug:\n" + res.debug : ""));
+            }
+        },
+        error: function(xhr) {
+            $('#btnTestGemini').removeClass('disabled');
+            $('#testStatusBadge').attr('class', 'badge badge-light-danger me-3 fs-6').text('ERROR');
+            $('#testStatusTitle').text('Terjadi Kesalahan Server / Koneksi');
+            $('#testResultDetails').text(xhr.responseText || 'Request gagal dijalankan.');
+        }
+    });
+}
+
+function testVisionAPI() {
+    var key = $('#google_api_key').val().trim();
+    
+    $('#testResultBox').slideDown();
+    $('#testStatusBadge').attr('class', 'badge badge-light-warning me-3 fs-6').text('Memproses...');
+    $('#testStatusTitle').text('Menghubungi Google Cloud Vision API...');
+    $('#testResultDetails').text('Mengirim cURL image annotation request...');
+    
+    $('#btnTestVision').addClass('disabled');
+
+    $.ajax({
+        url: baseUrl + 'settings/test_vision',
+        type: 'POST',
+        data: { google_api_key: key },
+        dataType: 'json',
+        success: function(res) {
+            $('#btnTestVision').removeClass('disabled');
+            if (res.success) {
+                $('#testStatusBadge').attr('class', 'badge badge-light-success me-3 fs-6').text('BERHASIL');
+                $('#testStatusTitle').text(res.message);
+                $('#testResultDetails').text("Respon dari Cloud Vision API:\n" + res.response);
+            } else {
+                $('#testStatusBadge').attr('class', 'badge badge-light-danger me-3 fs-6').text('GAGAL');
+                $('#testStatusTitle').text('Gagal Terhubung ke Cloud Vision API');
+                $('#testResultDetails').text("Pesan Error:\n" + res.error + (res.debug ? "\n\nRaw Debug:\n" + res.debug : ""));
+            }
+        },
+        error: function(xhr) {
+            $('#btnTestVision').removeClass('disabled');
+            $('#testStatusBadge').attr('class', 'badge badge-light-danger me-3 fs-6').text('ERROR');
+            $('#testStatusTitle').text('Terjadi Kesalahan Server / Koneksi');
+            $('#testResultDetails').text(xhr.responseText || 'Request gagal dijalankan.');
+        }
+    });
 }
 </script>

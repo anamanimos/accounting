@@ -115,4 +115,39 @@ class Settings extends CI_Controller {
 		return $this->output->set_content_type('application/json')
 			->set_output(json_encode(['status' => 'error', 'message' => 'Key tidak valid']));
 	}
+
+	public function test_gemini()
+	{
+		if (empty($this->session->userdata('logged_in'))) {
+			return $this->output->set_content_type('application/json')
+				->set_status_header(401)
+				->set_output(json_encode(['status' => 'error', 'message' => 'Unauthorized']));
+		}
+
+		$key   = trim($this->input->post('google_api_key'));
+		$model = trim($this->input->post('gemini_model'));
+
+		$this->load->library('gemini_ocr');
+		$res = $this->gemini_ocr->test_gemini($key, $model);
+
+		return $this->output->set_content_type('application/json')
+			->set_output(json_encode($res));
+	}
+
+	public function test_vision()
+	{
+		if (empty($this->session->userdata('logged_in'))) {
+			return $this->output->set_content_type('application/json')
+				->set_status_header(401)
+				->set_output(json_encode(['status' => 'error', 'message' => 'Unauthorized']));
+		}
+
+		$key = trim($this->input->post('google_api_key'));
+
+		$this->load->library('gemini_ocr');
+		$res = $this->gemini_ocr->test_vision($key);
+
+		return $this->output->set_content_type('application/json')
+			->set_output(json_encode($res));
+	}
 }

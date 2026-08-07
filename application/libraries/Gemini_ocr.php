@@ -31,6 +31,113 @@ class Gemini_ocr {
     }
 
     /**
+     * Test Gemini API Connection
+     */
+    public function test_gemini($custom_key = null, $custom_model = 'gemini-1.5-flash') {
+        $api_key = !empty($custom_key) ? trim($custom_key) : $this->get_api_key();
+        if (empty($api_key)) {
+            return ['success' => false, 'error' => 'API Key belum diisi.'];
+        }
+
+        $model = !empty($custom_model) ? trim($custom_model) : 'gemini-1.5-flash';
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $api_key;
+
+        $payload = [
+            "contents" => [
+                [
+                    "parts" => [
+                        ["text" => "Ping test. Jawab singkat 'OK: Gemini API Terhubung'."]
+                    ]
+                ]
+            ],
+            "generationConfig" => [
+                "temperature" => 0.1,
+                "maxOutputTokens" => 100
+            ]
+        ];
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_err = curl_error($ch);
+        curl_close($ch);
+
+        if (!empty($curl_err)) {
+            return ['success' => false, 'error' => 'cURL Error: ' . $curl_err];
+        }
+
+        if ($http_code !== 200) {
+            $res_json = json_decode($response, true);
+            $msg = $res_json['error']['message'] ?? ('HTTP Error ' . $http_code);
+            return ['success' => false, 'error' => 'Google Gemini API Error (' . $http_code . '): ' . $msg, 'debug' => $response];
+        }
+
+        $res_json = json_decode($response, true);
+        $text = trim($res_json['candidates'][0]['content']['parts'][0]['text'] ?? 'Respon kosong');
+
+        return ['success' => true, 'message' => 'Koneksi Gemini API (' . $model . ') Berhasil!', 'response' => $text];
+    }
+
+    /**
+     * Test Google Cloud Vision API Connection
+     */
+    public function test_vision($custom_key = null) {
+        $api_key = !empty($custom_key) ? trim($custom_key) : $this->get_api_key();
+        if (empty($api_key)) {
+            return ['success' => false, 'error' => 'API Key belum diisi.'];
+        }
+
+        $test_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        $url = "https://vision.googleapis.com/v1/images:annotate?key=" . $api_key;
+        $payload = [
+            "requests" => [
+                [
+                    "image" => [
+                        "content" => $test_base64
+                    ],
+                    "features" => [
+                        [
+                            "type" => "TEXT_DETECTION"
+                        ]
+                    ]
+                ]
+            ]
+        ];
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_err = curl_error($ch);
+        curl_close($ch);
+
+        if (!empty($curl_err)) {
+            return ['success' => false, 'error' => 'cURL Error: ' . $curl_err];
+        }
+
+        if ($http_code !== 200) {
+            $res_json = json_decode($response, true);
+            $msg = $res_json['error']['message'] ?? ('HTTP Error ' . $http_code);
+            return ['success' => false, 'error' => 'Google Cloud Vision API Error (' . $http_code . '): ' . $msg, 'debug' => $response];
+        }
+
+        return ['success' => true, 'message' => 'Koneksi Google Cloud Vision API (Free Tier) Berhasil!', 'response' => 'Status HTTP 200 OK. Feature TEXT_DETECTION aktif.'];
+    }
+
+    /**
      * Process receipt using Google Cloud Vision API or Gemini (Free Tier)
      */
     public function process_receipt($base64_image, $nama_order, $mime_type = 'image/jpeg') {
