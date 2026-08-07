@@ -276,10 +276,24 @@ document.addEventListener('DOMContentLoaded', function() {
         loadTable(pageUrl, { txt_cari: searchVal });
     });
 
+    function getModalInstance() {
+        if (!modalEditEl) return null;
+        var inst = bootstrap.Modal.getInstance(modalEditEl);
+        if (!inst) {
+            inst = new bootstrap.Modal(modalEditEl);
+        }
+        return inst;
+    }
+
     // Handle Click Edit Jurnal Button
     $(document).on('click', '.btn-edit-jurnal', function(e) {
         e.preventDefault();
-        var noJurnal = $(this).data('nojurnal');
+        var rawNoJurnal = $(this).attr('data-nojurnal');
+        if (!rawNoJurnal) {
+            Swal.fire('Gagal', 'No Jurnal tidak valid', 'warning');
+            return;
+        }
+        var noJurnal = String(rawNoJurnal).trim();
 
         $.ajax({
             url: '<?php echo base_url(); ?>jurnal_umum/get_jurnal_full',
@@ -308,15 +322,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     recalculateEditTotals();
 
-                    if (modalEdit) {
-                        modalEdit.show();
+                    var modalInst = getModalInstance();
+                    if (modalInst) {
+                        modalInst.show();
                     }
                 } else {
                     Swal.fire('Gagal', res.message || 'Data jurnal tidak ditemukan', 'error');
                 }
             },
-            error: function() {
-                Swal.fire('Error', 'Gagal terhubung ke server', 'error');
+            error: function(xhr) {
+                Swal.close();
+                var msg = 'Gagal terhubung ke server';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                } else if (xhr.responseText && xhr.responseText.length < 200) {
+                    msg = xhr.responseText;
+                }
+                Swal.fire('Gagal Memuat Data', msg, 'error');
             }
         });
     });

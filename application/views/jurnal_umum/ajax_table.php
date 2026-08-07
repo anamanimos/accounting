@@ -36,8 +36,8 @@
 					<td align="right" class="fw-bold" width="100"><?php echo number_format($db['kredit']); ?></td>
 					<td align="center" width="90">
 						<button type="button" class="btn btn-icon btn-sm btn-light-primary h-30px w-30px me-1 btn-edit-jurnal" 
-								data-nojurnal="<?php echo $db['no_jurnal']; ?>" 
-								data-norek="<?php echo $db['no_rek']; ?>"
+								data-nojurnal="<?php echo htmlspecialchars($db['no_jurnal'], ENT_QUOTES, 'UTF-8'); ?>" 
+								data-norek="<?php echo htmlspecialchars($db['no_rek'], ENT_QUOTES, 'UTF-8'); ?>"
 								title="Edit Jurnal">
 							<i class="ki-outline ki-pencil fs-5"></i>
 						</button>
