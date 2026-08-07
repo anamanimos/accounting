@@ -119,6 +119,13 @@
   },
   {
     "type": "link",
+    "url": "settings",
+    "title": "Pengaturan Sistem",
+    "icon": "ki-setting-3",
+    "levels": ["super admin", "admin"]
+  },
+  {
+    "type": "link",
     "url": "whatsapp",
     "title": "WhatsApp Gateway",
     "icon": "ki-whatsapp",

@@ -37,8 +37,8 @@ class Settings extends CI_Controller {
 		$d['ocr_provider']   = $this->app_model->get_setting('ocr_provider', 'gemini_flash');
 		$d['gemini_model']   = $this->app_model->get_setting('gemini_model', 'gemini-1.5-flash');
 
-		$d['content'] = $this->load->view('settings/index', $d, TRUE);
-		$this->load->view('home', $d);
+		$d['content'] = 'settings/index';
+		$this->load->view('templates/main', $d);
 	}
 
 	public function simpan()
