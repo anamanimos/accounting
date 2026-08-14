@@ -27,6 +27,9 @@
 <div id="view">
 	<div class="d-flex justify-content-between align-items-center mb-5">
 		<div>
+			<button type="button" class="btn btn-sm btn-primary ms-2" id="btn-tambah-jurnal">
+				<i class="ki-outline ki-plus fs-3"></i> Tambah Data
+			</button>
 			<a href="<?php echo base_url(); ?>jurnal_umum" class="btn btn-sm btn-light-primary ms-2">
 				<i class="ki-outline ki-arrows-circle fs-3"></i> Refresh
 			</a>
@@ -127,6 +130,99 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Input Jurnal Umum (Konsep Aplikasi Lama) -->
+<div class="modal fade" id="modal-tambah-jurnal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-900px">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0 justify-content-between align-items-center pt-5 px-7">
+                <h3 class="fw-bold text-gray-900 m-0">
+                    <i class="ki-outline ki-plus-circle fs-2 text-primary me-2"></i> Input Jurnal Umum
+                </h3>
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <i class="ki-outline ki-cross fs-1"></i>
+                </div>
+            </div>
+            
+            <div class="modal-body scroll-y mx-3 mx-xl-7 my-3 pt-4">
+                <!-- Header Info Form -->
+                <div class="card bg-light-primary border border-primary border-dashed mb-6 p-4">
+                    <div class="row gy-3">
+                        <div class="col-md-3">
+                            <label class="required fs-7 fw-bold text-gray-800 mb-1">No. Jurnal</label>
+                            <input type="text" name="no_jurnal" id="tambah_no_jurnal" class="form-control form-control-sm form-control-solid fw-bold" readonly />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="required fs-7 fw-bold text-gray-800 mb-1">Tanggal</label>
+                            <input type="date" name="tgl" id="tambah_tgl" class="form-control form-control-sm form-control-solid" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="fs-7 fw-bold text-gray-800 mb-1">No. Bukti</label>
+                            <input type="text" name="no_bukti" id="tambah_no_bukti" class="form-control form-control-sm form-control-solid" placeholder="No Bukti" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="fs-7 fw-bold text-gray-800 mb-1">Keterangan Jurnal</label>
+                            <input type="text" name="ket" id="tambah_ket" class="form-control form-control-sm form-control-solid" placeholder="Keterangan Transaksi" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Detail Baris Rekening (Legacy Form Entry) -->
+                <div class="card bg-light border border-gray-300 mb-6 p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold text-gray-800 m-0">Input Baris Rekening</h6>
+                    </div>
+                    <div class="row gy-3 align-items-end">
+                        <div class="col-md-4">
+                            <label class="required fs-7 fw-bold text-gray-800 mb-1">No Rekening</label>
+                            <select name="no_rek" id="tambah_no_rek" class="form-select form-select-sm form-select-solid">
+                                <option value="">-- Pilih Rekening --</option>
+                                <?php if (isset($list_rek) && $list_rek->num_rows() > 0): ?>
+                                    <?php foreach ($list_rek->result() as $rk): ?>
+                                        <option value="<?= $rk->no_rek ?>" data-namarek="<?= htmlspecialchars($rk->nama_rek, ENT_QUOTES, 'UTF-8') ?>">
+                                            <?= $rk->no_rek ?> | <?= htmlspecialchars($rk->nama_rek, ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="fs-7 fw-bold text-gray-800 mb-1">Nama Rekening</label>
+                            <input type="text" name="nama_rek" id="tambah_nama_rek" class="form-control form-control-sm form-control-solid" readonly placeholder="Nama Rekening" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="fs-7 fw-bold text-gray-800 mb-1">Debet (Rp)</label>
+                            <input type="number" name="dr" id="tambah_dr" class="form-control form-control-sm form-control-solid text-end" min="0" value="0" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="fs-7 fw-bold text-gray-800 mb-1">Kredit (Rp)</label>
+                            <input type="number" name="kr" id="tambah_kr" class="form-control form-control-sm form-control-solid text-end" min="0" value="0" />
+                        </div>
+                        <div class="col-md-1 text-end">
+                            <button type="button" id="btn-simpan-row" class="btn btn-sm btn-primary w-100" title="Simpan Baris">
+                                <i class="ki-outline ki-check fs-2 p-0"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end mt-3">
+                        <button type="button" id="btn-tambah-baris-clear" class="btn btn-sm btn-light-secondary me-2">
+                            <i class="ki-outline ki-plus fs-3"></i> Clear Input Detail
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Table Detail Rendered via AJAX (DetailJurnalUmum) -->
+                <div id="tampil_data_tambah" class="mb-5">
+                    <!-- Rendered via AJAX to jurnal_umum/DetailJurnalUmum -->
+                </div>
+
+                <div class="text-end pt-3">
+                    <button type="button" class="btn btn-sm btn-light me-3" data-bs-dismiss="modal">Tutup / Kembali</button>
+                </div>
             </div>
         </div>
     </div>
@@ -415,6 +511,149 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // --- LOGIC MODAL INPUT JURNAL UMUM (KONSEP APLIKASI LAMA) ---
+    var modalTambahEl = document.getElementById('modal-tambah-jurnal');
+    var modalTambah = modalTambahEl ? new bootstrap.Modal(modalTambahEl) : null;
+
+    function tampilDataTambah() {
+        var noJurnal = $('#tambah_no_jurnal').val();
+        if (!noJurnal) return;
+        $.ajax({
+            type: 'POST',
+            url: '<?php echo base_url(); ?>jurnal_umum/DetailJurnalUmum',
+            data: { no_jurnal: noJurnal },
+            cache: false,
+            success: function(data) {
+                $('#tampil_data_tambah').html(data);
+            }
+        });
+    }
+
+    function clearDetailInputs() {
+        $('#tambah_no_rek').val('');
+        $('#tambah_nama_rek').val('');
+        $('#tambah_dr').val('0');
+        $('#tambah_kr').val('0');
+    }
+
+    $('#btn-tambah-jurnal').on('click', function() {
+        $.ajax({
+            type: 'POST',
+            url: '<?php echo base_url(); ?>ref_json/CariNoJurnal',
+            dataType: 'json',
+            cache: false,
+            success: function(data) {
+                $('#tambah_no_jurnal').val(data.nojurnal);
+                
+                var dateVal = '';
+                if (data.tgl) {
+                    var parts = data.tgl.split('-');
+                    if (parts.length === 3) {
+                        if (parts[2].length === 4) {
+                            dateVal = parts[2] + '-' + parts[1] + '-' + parts[0];
+                        } else {
+                            dateVal = data.tgl;
+                        }
+                    }
+                }
+                if (!dateVal) {
+                    dateVal = new Date().toISOString().split('T')[0];
+                }
+                $('#tambah_tgl').val(dateVal);
+                $('#tambah_no_bukti').val('');
+                $('#tambah_ket').val('');
+                clearDetailInputs();
+                tampilDataTambah();
+                if (modalTambah) {
+                    modalTambah.show();
+                }
+            },
+            error: function() {
+                Swal.fire('Error', 'Gagal mengambil nomor jurnal otomatis', 'error');
+            }
+        });
+    });
+
+    $('#tambah_no_rek').on('change', function() {
+        var selectedOpt = $(this).find('option:selected');
+        var namaRek = selectedOpt.attr('data-namarek') || '';
+        if (namaRek) {
+            $('#tambah_nama_rek').val(namaRek);
+        } else {
+            var noRek = $(this).val();
+            if (noRek) {
+                $.ajax({
+                    type: 'POST',
+                    url: '<?php echo base_url(); ?>ref_json/CariNamaRek',
+                    data: { no_rek: noRek },
+                    dataType: 'json',
+                    success: function(res) {
+                        $('#tambah_nama_rek').val(res.nama_rek || '');
+                    }
+                });
+            } else {
+                $('#tambah_nama_rek').val('');
+            }
+        }
+    });
+
+    $('#btn-simpan-row').on('click', function() {
+        var noJurnal = $('#tambah_no_jurnal').val();
+        var tgl = $('#tambah_tgl').val();
+        var noBukti = $('#tambah_no_bukti').val();
+        var ket = $('#tambah_ket').val();
+        var noRek = $('#tambah_no_rek').val();
+        var debet = $('#tambah_dr').val();
+        var kredit = $('#tambah_kr').val();
+
+        if (!noRek) {
+            Swal.fire('Info', 'Maaf, No Rekening tidak boleh kosong', 'info');
+            $('#tambah_no_rek').focus();
+            return;
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: '<?php echo base_url(); ?>jurnal_umum/simpan',
+            data: {
+                no_jurnal: noJurnal,
+                tgl: tgl,
+                no_bukti: noBukti,
+                ket: ket,
+                no_rek: noRek,
+                debet: debet,
+                kredit: kredit
+            },
+            cache: false,
+            success: function(response) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Berhasil',
+                    text: 'Baris rekening berhasil disimpan',
+                    timer: 1200,
+                    showConfirmButton: false
+                });
+                clearDetailInputs();
+                tampilDataTambah();
+            },
+            error: function() {
+                Swal.fire('Gagal', 'Terjadi kesalahan saat menyimpan baris', 'error');
+            }
+        });
+    });
+
+    $('#btn-tambah-baris-clear').on('click', function() {
+        clearDetailInputs();
+        $('#tambah_no_rek').focus();
+    });
+
+    if (modalTambahEl) {
+        modalTambahEl.addEventListener('hidden.bs.modal', function () {
+            var searchVal = $('#txt_cari').val();
+            loadTable('<?php echo base_url(); ?>jurnal_umum/index/0', { txt_cari: searchVal });
+        });
+    }
 
 });
 </script>

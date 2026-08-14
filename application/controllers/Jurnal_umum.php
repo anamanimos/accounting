@@ -522,28 +522,36 @@ class Jurnal_umum extends CI_Controller {
 	
 	public function simpan()
 	{
-		
 		$cek = $this->session->userdata('logged_in');
 		if(!empty($cek)){
-				$up['no_jurnal']=$this->input->post('no_jurnal');
-				$up['tgl_jurnal']=$this->app_model->tgl_sql($this->input->post('tgl'));
-				$up['ket']=$this->input->post('ket');
-				$up['no_bukti']=$this->input->post('no_bukti');
-				$up['no_rek']=$this->input->post('no_rek');
-				$up['debet']=str_replace(',','',$this->input->post('debet'));
-				$up['kredit']=str_replace(',','',$this->input->post('kredit'));
-				$up['username']=$this->session->userdata('username');
-				$up['tgl_insert']=date('Y-m-d h:m:s');
+				$no_jurnal = $this->input->post('no_jurnal');
+				$raw_tgl   = $this->input->post('tgl');
+
+				if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw_tgl)) {
+					$tgl_jurnal = $raw_tgl;
+				} else {
+					$tgl_jurnal = $this->app_model->tgl_sql($raw_tgl);
+				}
+
+				$up['no_jurnal']   = $no_jurnal;
+				$up['tgl_jurnal']  = $tgl_jurnal;
+				$up['ket']         = $this->input->post('ket');
+				$up['no_bukti']      = $this->input->post('no_bukti');
+				$up['no_rek']      = $this->input->post('no_rek');
+				$up['debet']       = str_replace(',','',$this->input->post('debet'));
+				$up['kredit']      = str_replace(',','',$this->input->post('kredit'));
+				$username          = $this->session->userdata('username');
+				$up['username']    = !empty($username) ? $username : 'admin';
+				$up['tgl_insert']  = date('Y-m-d H:i:s');
 				
-				$id['no_jurnal']=$this->input->post('no_jurnal');
-				$id['no_rek']=$this->input->post('no_rek');
+				$id['no_jurnal']   = $no_jurnal;
+				$id['no_rek']      = $this->input->post('no_rek');
 				
-				$no_jurnal 	=$this->input->post('no_jurnal');
-				$no_rek 	=$this->input->post('no_rek');
+				$no_rek 	       = $this->input->post('no_rek');
 				
 				$text = "SELECT * FROM jurnal_umum WHERE no_jurnal='$no_jurnal' AND no_rek='$no_rek'";
-				$data = $this->app_model->manualQuery($text); //$this->app_model->getSelectedData("jurnal_umum",$id);
-				if($data->num_rows()>0){
+				$data = $this->app_model->manualQuery($text);
+				if($data->num_rows() > 0){
 					$this->app_model->updateData("jurnal_umum",$up,$id);
 					echo 'Simpan data Sukses';
 				}else{
@@ -566,8 +574,6 @@ class Jurnal_umum extends CI_Controller {
 			$d['data'] = $this->app_model->manualQuery($text);
 			
 			$this->load->view('jurnal_umum/detail_jurnal',$d);
-		
-			//echo $text;
 		}else{
 			header('location:'.base_url());
 		}
@@ -581,7 +587,7 @@ class Jurnal_umum extends CI_Controller {
 			$rek = $this->input->post('no_rek'); 
 			
 			$text = "DELETE FROM jurnal_umum WHERE no_jurnal='$id' AND no_rek='$rek'";
-			$d['data'] = $this->app_model->manualQuery($text);
+			$this->app_model->manualQuery($text);
 			
 			$text = "SELECT * FROM jurnal_umum WHERE no_jurnal='$id'";
 			$d['data'] = $this->app_model->manualQuery($text);

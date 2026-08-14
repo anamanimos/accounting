@@ -4,7 +4,7 @@
 </style>
 <script type="text/javascript">
 function hapusData(id){
-	var no_jurnal = $("#no_jurnal").val();
+	var no_jurnal = $("#tambah_no_jurnal").val() || $("#no_jurnal").val();
 	var string = "no_jurnal="+no_jurnal+"&no_rek="+id;
 	
     Swal.fire({
@@ -22,7 +22,12 @@ function hapusData(id){
                 data	: string,
                 cache	: false,
                 success	: function(data){
-                    $("#tampil_data").html(data);
+                    if ($("#tampil_data_tambah").length > 0) {
+                        $("#tampil_data_tambah").html(data);
+                    }
+                    if ($("#tampil_data").length > 0) {
+                        $("#tampil_data").html(data);
+                    }
                 }
             });
         }
