@@ -117,7 +117,7 @@ class Gemini_ocr {
      * Helper to call Gemini API trying multiple endpoints (v1beta, v1) and model candidates
      */
     protected function call_gemini_api($payload, $api_key, $primary_model = 'gemini-1.5-flash') {
-        $endpoints = ['v1beta', 'v1'];
+        $endpoints = ['v1beta'];
         $primary_model = str_replace('models/', '', trim($primary_model));
 
         $models_to_try = array_unique(array_filter([
@@ -125,13 +125,7 @@ class Gemini_ocr {
             'gemini-2.5-flash',
             'gemini-2.0-flash',
             'gemini-flash-latest',
-            'gemini-2.5-pro',
-            'gemini-3.6-flash',
-            'gemini-3.5-flash',
-            'gemini-2.0-flash-lite',
-            'gemini-pro-latest',
-            'gemini-1.5-flash',
-            'gemini-1.5-pro'
+            'gemini-1.5-flash'
         ]));
 
         $last_response = '';
@@ -150,7 +144,7 @@ class Gemini_ocr {
                 curl_setopt($ch, CURLOPT_POST, true);
                 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
                 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 20);
                 
                 $response = curl_exec($ch);
                 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
