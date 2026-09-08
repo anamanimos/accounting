@@ -273,8 +273,29 @@ document.getElementById('btn_save_jurnal').addEventListener('click', function() 
             axios.post(saveUrl, { data: previewData })
                 .then(function(res) {
                     if (res.data.status === 'success') {
-                        Swal.fire({ title: 'Berhasil!', text: res.data.message, icon: 'success' })
-                            .then(function() { window.location.href = listUrl; });
+                        Swal.fire({
+                            title: 'Jurnal Berhasil Disimpan!',
+                            text: res.data.message || 'Data transaksi jurnal telah berhasil disimpan ke database.',
+                            icon: 'success',
+                            showCancelButton: true,
+                            confirmButtonText: '<i class="ki-outline ki-document fs-3 me-1"></i> Ke Jurnal Umum',
+                            cancelButtonText: '<i class="ki-outline ki-plus-circle fs-3 me-1"></i> Input Data Baru',
+                            confirmButtonColor: '#009EF7',
+                            cancelButtonColor: '#50CD89',
+                            reverseButtons: true,
+                            allowOutsideClick: false
+                        }).then(function(choice) {
+                            if (choice.isConfirmed) {
+                                window.location.href = listUrl;
+                            } else {
+                                // Reset form & preview untuk input nota baru
+                                document.getElementById('form_ocr').reset();
+                                document.getElementById('prompt_text').value = '';
+                                previewData = [];
+                                document.getElementById('card_preview').classList.add('d-none');
+                                document.getElementById('card_upload').scrollIntoView({ behavior: 'smooth' });
+                            }
+                        });
                     } else {
                         Swal.fire('Gagal', res.data.message, 'error');
                     }
