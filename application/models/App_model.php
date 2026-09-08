@@ -442,6 +442,18 @@ class App_Model extends CI_Model
 			$this->db->delete('settings');
 		}
 	}
+
+	public function getMaxJurnal()
+	{
+		$row = $this->db->query("SELECT MAX(CAST(no_jurnal AS UNSIGNED)) as max_val FROM jurnal_umum")->row();
+		return $row ? $row->max_val : null;
+	}
+
+	public function getMaxBukti()
+	{
+		$row = $this->db->query("SELECT MAX(CAST(no_bukti AS UNSIGNED)) as max_val FROM jurnal_umum")->row();
+		return $row ? $row->max_val : null;
+	}
 }
 	
 /* End of file app_model.php */

@@ -842,8 +842,14 @@ class Webhook_wa extends CI_Controller {
     private function _build_jurnal_array($transactions)
     {
         $jurnal_rows = [];
-        $max_jurnal = $this->app_model->getMaxJurnal();
+        
+        $max_jurnal_row = $this->db->query("SELECT MAX(CAST(no_jurnal AS UNSIGNED)) as max_val FROM jurnal_umum")->row();
+        $max_jurnal = $max_jurnal_row ? $max_jurnal_row->max_val : null;
+        $max_bukti_row = $this->db->query("SELECT MAX(CAST(no_bukti AS UNSIGNED)) as max_val FROM jurnal_umum")->row();
+        $max_bukti = $max_bukti_row ? $max_bukti_row->max_val : null;
+
         $current_jurnal = $max_jurnal ? (int)$max_jurnal + 1 : (int)(date('y') . date('m') . '00001');
+        $current_bukti = $max_bukti ? (int)$max_bukti + 1 : (int)(date('y') . date('m') . '001');
 
         foreach ($transactions as $trx) {
             $tgl_jurnal = $trx['tgl'];
@@ -853,12 +859,14 @@ class Webhook_wa extends CI_Controller {
             $rek_inventory_or_ap = $trx['rek_inventory_or_ap'];
             $tgl_insert = date('Y-m-d H:i:s');
             $username = 'WA-BOT';
+            $nob = (string)$current_bukti;
+            $noj = (string)$current_jurnal;
 
             // Debet Piutang (112)
             $jurnal_rows[] = [
-                'no_jurnal' => (string)$current_jurnal,
+                'no_jurnal' => $noj,
                 'tgl_jurnal' => $tgl_jurnal,
-                'no_bukti' => '',
+                'no_bukti' => $nob,
                 'ket' => $ket,
                 'no_rek' => '112',
                 'debet' => $harga_jual,
@@ -869,9 +877,9 @@ class Webhook_wa extends CI_Controller {
 
             // Kredit Pendapatan (411)
             $jurnal_rows[] = [
-                'no_jurnal' => (string)$current_jurnal,
+                'no_jurnal' => $noj,
                 'tgl_jurnal' => $tgl_jurnal,
-                'no_bukti' => '',
+                'no_bukti' => $nob,
                 'ket' => $ket,
                 'no_rek' => '411',
                 'debet' => 0,
@@ -882,9 +890,9 @@ class Webhook_wa extends CI_Controller {
 
             // Debet HPP (516)
             $jurnal_rows[] = [
-                'no_jurnal' => (string)$current_jurnal,
+                'no_jurnal' => $noj,
                 'tgl_jurnal' => $tgl_jurnal,
-                'no_bukti' => '',
+                'no_bukti' => $nob,
                 'ket' => $ket,
                 'no_rek' => '516',
                 'debet' => $modal,
@@ -895,9 +903,9 @@ class Webhook_wa extends CI_Controller {
 
             // Kredit Kas / Hutang (118 atau 213)
             $jurnal_rows[] = [
-                'no_jurnal' => (string)$current_jurnal,
+                'no_jurnal' => $noj,
                 'tgl_jurnal' => $tgl_jurnal,
-                'no_bukti' => '',
+                'no_bukti' => $nob,
                 'ket' => $ket,
                 'no_rek' => $rek_inventory_or_ap,
                 'debet' => 0,
@@ -907,6 +915,7 @@ class Webhook_wa extends CI_Controller {
             ];
 
             $current_jurnal++;
+            $current_bukti++;
         }
 
         return $jurnal_rows;
