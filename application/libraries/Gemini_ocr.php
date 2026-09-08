@@ -465,13 +465,78 @@ Aturannya:
     }
 
     /**
+     * Parse various date formats including Indonesian month names into YYYY-MM-DD
+     */
+    public function parse_date_indonesia($text) {
+        if (empty($text) || !is_string($text)) return null;
+
+        $text = trim($text);
+
+        $month_map = [
+            'januari' => 1, 'jan' => 1, 'january' => 1,
+            'februari' => 2, 'feb' => 2, 'february' => 2,
+            'maret' => 3, 'mar' => 3, 'march' => 3,
+            'april' => 4, 'apr' => 4,
+            'mei' => 5, 'may' => 5,
+            'juni' => 6, 'jun' => 6, 'june' => 6,
+            'juli' => 7, 'jul' => 7, 'july' => 7,
+            'agustus' => 8, 'agu' => 8, 'agt' => 8, 'august' => 8, 'aug' => 8,
+            'september' => 9, 'sep' => 9, 'sept' => 9,
+            'oktober' => 10, 'okt' => 10, 'october' => 10, 'oct' => 10,
+            'november' => 11, 'nov' => 11,
+            'desember' => 12, 'des' => 12, 'december' => 12, 'dec' => 12
+        ];
+
+        // 1. Text Month Name match: e.g. "14 Juli 2026", "14-Juli-2026", "14 Jul 26", "Juli 14, 2026"
+        if (preg_match('/(\d{1,2})[\s\/\.-]+([a-zA-Z]{3,10})[\s\/\.-]+(\d{2,4})/i', $text, $m)) {
+            $day = (int)$m[1];
+            $month_name = strtolower($m[2]);
+            $year = (int)$m[3];
+
+            if (isset($month_map[$month_name])) {
+                $month = $month_map[$month_name];
+                if ($year < 100) $year += 2000;
+                if ($day >= 1 && $day <= 31 && $month >= 1 && $month <= 12) {
+                    return sprintf("%04d-%02d-%02d", $year, $month, $day);
+                }
+            }
+        }
+
+        // 2. Numeric Date match: e.g. "14/07/2026", "14-07-26", "2026-07-14", "14.07.2026", "14 - 07 - 2026"
+        if (preg_match('/(?:tgl|tanggal)?\s*[:\.]?\s*(\d{1,4})\s*[\/\.-]\s*(\d{1,2})\s*[\/\.-]\s*(\d{1,4})/i', $text, $m)) {
+            $p1 = (int)$m[1];
+            $p2 = (int)$m[2];
+            $p3 = (int)$m[3];
+
+            if (strlen($m[1]) == 4) {
+                // Format YYYY-MM-DD
+                $year = $p1;
+                $month = $p2;
+                $day = $p3;
+            } else {
+                // Format DD-MM-YYYY or DD-MM-YY
+                $day = $p1;
+                $month = $p2;
+                $year = $p3;
+                if ($year < 100) $year += 2000;
+            }
+
+            if ($day >= 1 && $day <= 31 && $month >= 1 && $month <= 12 && $year >= 2000 && $year <= 2099) {
+                return sprintf("%04d-%02d-%02d", $year, $month, $day);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Process directly via Gemini Multimodal Vision API
      */
     protected function process_via_gemini($base64_image, $nama_order, $api_key, $primary_model = 'gemini-1.5-flash', $mime_type = 'image/jpeg') {
         $prompt = "Tolong analisis gambar nota ini dan ekstrak SEMUA transaksi/barang ke dalam format array JSON persis seperti contoh ini:
 [
   {
-    \"tanggal\": \"DD - MM - YYYY\",
+    \"tanggal\": \"DD-MM-YYYY\",
     \"pelanggan\": \"Sevencols\",
     \"suplier\": \"[Nama Toko]\",
     \"deskripsi\": \"[Caption Barang]\",
@@ -483,12 +548,12 @@ Aturannya:
 Aturannya:
 1. Output WAJIB berupa JSON array murni tanpa tambahan teks/penjelasan atau markdown (tanpa awalan ```json).
 2. EKSTRAK SEMUA BARANG. Jika nota memiliki 3 macam barang, array JSON harus berisi 3 object.
-3. 'tanggal' diisi tanggal transaksi di nota dengan format DD - MM - YYYY (harus ada spasi).
+3. 'tanggal' WAJIB diisi TANGGAL TRANSAKSI YANG TERCANTUM PADA NOTA (misal nota tertulis tanggal 14 Juli 2026, isi: \"14-07-2026\"). JANGAN gunakan tanggal hari ini jika di nota ada tanggal/waktu transaksi.
 4. 'pelanggan' SELALU diisi teks \"Sevencols\" secara hardcode.
-5. 'suplier' diambil dari nama toko yang menerbitkan nota (misal HiATA Clothing).
+5. 'suplier' diambil dari nama toko yang menerbitkan nota (misal HiATA Clothing, PE, dll).
 6. 'deskripsi' diambil dari teks caption ini: \"" . $nama_order . "\". Jika ada beberapa barang, sesuaikan/pecah caption ini per barang. Jika tidak, gunakan caption utuh.
 7. 'ukuran' WAJIB diisi dengan angka kuantitas/Banyaknya barang (integer).
-8. 'modal' WAJIB DIISI! Diambil dari nominal di kolom 'Jumlah' atau total harga khusus untuk baris barang tersebut, BUKAN harga satuan. WAJIB diisi berupa angka bulat (integer) TANPA titik/koma (contoh: 262500). Jangan potong angka nol-nya.";
+8. 'modal' WAJIB DIISI! Diambil dari nominal di kolom 'Jumlah' atau total harga khusus untuk baris barang tersebut, BUKAN harga satuan. WAJIB diisi berupa angka bulat (integer) TANPA titik/koma (contoh: 262500).";
 
         $payload = [
             "contents" => [
@@ -561,16 +626,14 @@ Aturannya:
         }
 
         if (is_array($json_data) && count($json_data) > 0) {
-            $raw_tgl = $json_data[0]['tanggal'] ?? date('d - m - Y');
-            $formatted_date = date('d - m - Y');
-
-            // Format date to DD - MM - YYYY
-            if (preg_match('/(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/', $raw_tgl, $m_tgl)) {
-                if (strlen($m_tgl[1]) == 4) {
-                    $formatted_date = sprintf("%02d - %02d - %04d", $m_tgl[3], $m_tgl[2], $m_tgl[1]);
-                } else {
-                    $formatted_date = sprintf("%02d - %02d - %04d", $m_tgl[1], $m_tgl[2], $m_tgl[3]);
-                }
+            $raw_tgl = $json_data[0]['tanggal'] ?? '';
+            $parsed_tgl = $this->parse_date_indonesia($raw_tgl);
+            
+            if ($parsed_tgl) {
+                $parts = explode('-', $parsed_tgl);
+                $formatted_date = "{$parts[2]} - {$parts[1]} - {$parts[0]}";
+            } else {
+                $formatted_date = date('d - m - Y');
             }
 
             $output_lines = [$formatted_date];
@@ -600,8 +663,10 @@ Aturannya:
             $line = trim($line);
             if (empty($line)) continue;
 
-            if (preg_match('/(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})/', $line, $m_tgl)) {
-                $formatted_date = sprintf("%02d - %02d - %04d", $m_tgl[1], $m_tgl[2], $m_tgl[3]);
+            $parsed_line_tgl = $this->parse_date_indonesia($line);
+            if ($parsed_line_tgl) {
+                $parts = explode('-', $parsed_line_tgl);
+                $formatted_date = "{$parts[2]} - {$parts[1]} - {$parts[0]}";
                 continue;
             }
 

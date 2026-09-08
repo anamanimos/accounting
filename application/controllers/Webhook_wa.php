@@ -529,22 +529,64 @@ class Webhook_wa extends CI_Controller {
 
     private function _extract_date($text)
     {
-        if (empty($text)) return null;
+        if (empty($text) || !is_string($text)) return null;
 
-        // Match formats like: 14/07/2026, 14-07-2026, 2026-07-14, 14.07.2026, Tgl: 14/07/2026
-        if (preg_match('/(?:tgl|tanggal)?\s*[:\.]?\s*(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/i', $text, $m)) {
+        $text = trim($text);
+
+        $month_map = [
+            'januari' => 1, 'jan' => 1, 'january' => 1,
+            'februari' => 2, 'feb' => 2, 'february' => 2,
+            'maret' => 3, 'mar' => 3, 'march' => 3,
+            'april' => 4, 'apr' => 4,
+            'mei' => 5, 'may' => 5,
+            'juni' => 6, 'jun' => 6, 'june' => 6,
+            'juli' => 7, 'jul' => 7, 'july' => 7,
+            'agustus' => 8, 'agu' => 8, 'agt' => 8, 'august' => 8, 'aug' => 8,
+            'september' => 9, 'sep' => 9, 'sept' => 9,
+            'oktober' => 10, 'okt' => 10, 'october' => 10, 'oct' => 10,
+            'november' => 11, 'nov' => 11,
+            'desember' => 12, 'des' => 12, 'december' => 12, 'dec' => 12
+        ];
+
+        // 1. Text Month Name match: e.g. "14 Juli 2026", "14-Juli-2026", "14 Jul 26", "Juli 14, 2026"
+        if (preg_match('/(\d{1,2})[\s\/\.-]+([a-zA-Z]{3,10})[\s\/\.-]+(\d{2,4})/i', $text, $m)) {
+            $day = (int)$m[1];
+            $month_name = strtolower($m[2]);
+            $year = (int)$m[3];
+
+            if (isset($month_map[$month_name])) {
+                $month = $month_map[$month_name];
+                if ($year < 100) $year += 2000;
+                if ($day >= 1 && $day <= 31 && $month >= 1 && $month <= 12) {
+                    return sprintf("%04d-%02d-%02d", $year, $month, $day);
+                }
+            }
+        }
+
+        // 2. Numeric Date match: e.g. "14/07/2026", "14-07-26", "2026-07-14", "14.07.2026", "14 - 07 - 2026"
+        if (preg_match('/(?:tgl|tanggal)?\s*[:\.]?\s*(\d{1,4})\s*[\/\.-]\s*(\d{1,2})\s*[\/\.-]\s*(\d{1,4})/i', $text, $m)) {
             $p1 = (int)$m[1];
             $p2 = (int)$m[2];
             $p3 = (int)$m[3];
 
             if (strlen($m[1]) == 4) {
-                // YYYY-MM-DD
-                return sprintf("%04d-%02d-%02d", $p1, $p2, $p3);
-            } elseif (strlen($m[3]) == 4) {
-                // DD-MM-YYYY
-                return sprintf("%04d-%02d-%02d", $p3, $p2, $p1);
+                // Format YYYY-MM-DD
+                $year = $p1;
+                $month = $p2;
+                $day = $p3;
+            } else {
+                // Format DD-MM-YYYY or DD-MM-YY
+                $day = $p1;
+                $month = $p2;
+                $year = $p3;
+                if ($year < 100) $year += 2000;
+            }
+
+            if ($day >= 1 && $day <= 31 && $month >= 1 && $month <= 12 && $year >= 2000 && $year <= 2099) {
+                return sprintf("%04d-%02d-%02d", $year, $month, $day);
             }
         }
+
         return null;
     }
 

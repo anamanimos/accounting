@@ -188,12 +188,11 @@ class Jurnal_umum extends CI_Controller {
 				continue;
 			}
 
-			// 1. Cek Tanggal (DD - MM - YYYY)
-			if (preg_match('/^(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{4})$/', $line, $matches)) {
-				$day = str_pad($matches[1], 2, "0", STR_PAD_LEFT);
-				$month = str_pad($matches[2], 2, "0", STR_PAD_LEFT);
-				$year = $matches[3];
-				$current_date = "$year-$month-$day";
+			// 1. Cek Tanggal
+			$this->load->library('gemini_ocr');
+			$parsed_date = $this->gemini_ocr->parse_date_indonesia($clean_line);
+			if ($parsed_date) {
+				$current_date = $parsed_date;
 				continue;
 			}
 
