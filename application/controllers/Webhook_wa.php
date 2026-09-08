@@ -33,11 +33,72 @@ class Webhook_wa extends CI_Controller {
         return !empty($val) ? trim($val) : $default;
     }
 
+    private function _extract_caption($payload)
+    {
+        if (empty($payload) || !is_array($payload)) return '';
+
+        if (!empty($payload['body']) && is_string($payload['body'])) return trim($payload['body']);
+        if (!empty($payload['caption']) && is_string($payload['caption'])) return trim($payload['caption']);
+        if (!empty($payload['text']) && is_string($payload['text'])) return trim($payload['text']);
+
+        if (!empty($payload['message']) && is_array($payload['message'])) {
+            $msg = $payload['message'];
+            if (!empty($msg['imageMessage']['caption'])) return trim($msg['imageMessage']['caption']);
+            if (!empty($msg['documentMessage']['caption'])) return trim($msg['documentMessage']['caption']);
+            if (!empty($msg['conversation'])) return trim($msg['conversation']);
+            if (!empty($msg['extendedTextMessage']['text'])) return trim($msg['extendedTextMessage']['text']);
+        }
+
+        return '';
+    }
+
+    private function _extract_image_path($payload)
+    {
+        if (empty($payload) || !is_array($payload)) return null;
+
+        // 1. Direct 'image' key
+        if (!empty($payload['image'])) {
+            if (is_string($payload['image'])) return $payload['image'];
+            if (is_array($payload['image'])) {
+                return $payload['image']['path'] ?? $payload['image']['url'] ?? $payload['image']['directPath'] ?? null;
+            }
+        }
+
+        // 2. Direct 'media', 'file', 'document', 'url', etc.
+        foreach (['media', 'file', 'document', 'media_path', 'image_url', 'media_url', 'url'] as $k) {
+            if (!empty($payload[$k])) {
+                if (is_string($payload[$k])) return $payload[$k];
+                if (is_array($payload[$k])) {
+                    return $payload[$k]['path'] ?? $payload[$k]['url'] ?? $payload[$k]['directPath'] ?? null;
+                }
+            }
+        }
+
+        // 3. Nested 'message' structure (Baileys format)
+        if (!empty($payload['message']) && is_array($payload['message'])) {
+            $msg = $payload['message'];
+            if (!empty($msg['imageMessage'])) {
+                return $msg['imageMessage']['url'] ?? $msg['imageMessage']['directPath'] ?? $msg['imageMessage']['path'] ?? null;
+            }
+            if (!empty($msg['documentMessage'])) {
+                return $msg['documentMessage']['url'] ?? $msg['documentMessage']['directPath'] ?? $msg['documentMessage']['path'] ?? null;
+            }
+        }
+
+        // 4. Type is image / media and path is specified
+        $type = strtolower($payload['type'] ?? $payload['media_type'] ?? '');
+        if (in_array($type, ['image', 'media', 'document', 'photo', 'picture'])) {
+            return $payload['path'] ?? $payload['url'] ?? $payload['file_path'] ?? null;
+        }
+
+        return null;
+    }
+
     public function index()
     {
         // Mencegah script mati jika gateway WA timeout karena Gemini butuh waktu lama
         ignore_user_abort(true);
-        set_time_limit(120); // Beri waktu ekstra untuk proses Gemini
+        set_time_limit(180);
 
         $raw_input = file_get_contents('php://input');
         $method = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
@@ -49,62 +110,84 @@ class Webhook_wa extends CI_Controller {
         $log_content .= "Method: " . $method . "\n";
         $log_content .= "Payload: " . $raw_input . "\n\n";
         
-        file_put_contents($log_file, $log_content, FILE_APPEND);
+        @file_put_contents($log_file, $log_content, FILE_APPEND);
         
         $data = json_decode($raw_input, true);
-        if (!$data || !isset($data['event'])) {
+        if (!$data || !is_array($data)) {
             return $this->_response(['status' => 'invalid_json']);
         }
 
-        // Hanya proses event message
-        if ($data['event'] !== 'message') {
+        // Hanya proses event message jika ada field event
+        $event = strtolower($data['event'] ?? '');
+        if (!empty($event) && strpos($event, 'message') === false) {
+            @file_put_contents($log_file, "[DEBUG] Ignored event: $event\n", FILE_APPEND);
             return $this->_response(['status' => 'ignored_not_message']);
         }
 
-        $session_id = $data['session_id'] ?? '';
+        $session_id = $data['session_id'] ?? $data['device_id'] ?? $data['sessionId'] ?? '';
+        $configured_device_id = $this->_get_wa_setting('wa_device_id', 'erp-damaijaya');
 
-        // Filter berdasarkan session_id
-        if (strpos($session_id, 'erp-damaijaya') === false) {
-            return $this->_response(['status' => 'ignored_other_session']);
+        // Filter session_id jika keduanya ada dan jelas tidak cocok
+        if (!empty($session_id) && !empty($configured_device_id)) {
+            if (stripos($session_id, $configured_device_id) === false && stripos($configured_device_id, $session_id) === false) {
+                @file_put_contents($log_file, "[DEBUG] Ignored session mismatch: incoming '$session_id' vs configured '$configured_device_id'\n", FILE_APPEND);
+                return $this->_response(['status' => 'ignored_other_session']);
+            }
         }
 
-        $payload = $data['payload'] ?? [];
-        if (empty($payload)) {
+        $payload = $data['payload'] ?? $data['data'] ?? [];
+        if (empty($payload) || !is_array($payload)) {
+            @file_put_contents($log_file, "[DEBUG] Empty payload\n", FILE_APPEND);
             return $this->_response(['status' => 'ignored_empty_payload']);
         }
 
-        // Cegah looping bot
-        if (isset($payload['is_from_me']) && $payload['is_from_me'] == true) {
-            return $this->_response(['status' => 'ignored_from_me']);
+        $body = $this->_extract_caption($payload);
+        $image_path = $this->_extract_image_path($payload);
+
+        // Cegah looping pesan bot sendiri, tapi izinkan manual input jika bukan pesan otomatis bot
+        if (!empty($payload['is_from_me']) && $payload['is_from_me'] == true) {
+            $bot_markers = ['*DRAF JURNAL', 'Silakan balas pesan ini', 'Memproses gambar', '✅ Jurnal berhasil disimpan', 'Draf jurnal telah dibatalkan', '⚠️ Gagal'];
+            $is_bot_auto_msg = false;
+            foreach ($bot_markers as $marker) {
+                if (stripos($body, $marker) !== false) {
+                    $is_bot_auto_msg = true;
+                    break;
+                }
+            }
+            if ($is_bot_auto_msg) {
+                @file_put_contents($log_file, "[DEBUG] Ignored bot self auto-message\n", FILE_APPEND);
+                return $this->_response(['status' => 'ignored_from_me']);
+            }
         }
 
-        $message_id = $payload['id'] ?? '';
+        $message_id = $payload['id'] ?? $payload['message_id'] ?? $payload['key']['id'] ?? '';
         
         // Idempotency check (mencegah proses berulang jika gateway mengirim ulang webhook)
         if (!empty($message_id)) {
             $cache_file = FCPATH . 'application/cache/wa_msg_' . md5($message_id);
             if (file_exists($cache_file)) {
+                @file_put_contents($log_file, "[DEBUG] Message already processed: $message_id\n", FILE_APPEND);
                 return $this->_response(['status' => 'already_processed']);
             }
-            file_put_contents($cache_file, date('Y-m-d H:i:s'));
+            @file_put_contents($cache_file, date('Y-m-d H:i:s'));
         }
 
-        $chat_id = $payload['chat_id'] ?? '';
-        $target_group = $this->_get_wa_setting('wa_group_id', '120363426581172416@g.us');
+        $chat_id = trim($payload['chat_id'] ?? $payload['from'] ?? $payload['key']['remoteJid'] ?? '');
+        $target_group = trim($this->_get_wa_setting('wa_group_id', '120363426581172416@g.us'));
 
-        // Hanya proses pesan dari grup target
-        if ($chat_id !== $target_group) {
+        // Hanya proses pesan dari grup target jika target_group diset
+        if (!empty($target_group) && !empty($chat_id) && $chat_id !== $target_group) {
+            @file_put_contents($log_file, "[DEBUG] Ignored wrong group: incoming '$chat_id' vs target '$target_group'\n", FILE_APPEND);
             return $this->_response(['status' => 'ignored_wrong_group']);
         }
 
-        $body = trim($payload['body'] ?? '');
-        $sender_jid = $payload['from'] ?? '';
-        $replied_to_id = $payload['replied_to_id'] ?? null;
+        $sender_jid = $payload['from'] ?? $payload['participant'] ?? $payload['key']['participant'] ?? $chat_id;
+        $replied_to_id = $payload['replied_to_id'] ?? $payload['contextInfo']['stanzaId'] ?? null;
 
         // Cek State Machine (YA / BATAL)
-        $upper_body = strtoupper($body);
+        $upper_body = strtoupper(trim($body));
         if (in_array($upper_body, ['YA', 'BATAL'])) {
-            file_put_contents(FCPATH.'wa.txt', "[DEBUG] Detected YA/BATAL. upper_body: $upper_body, replied_to_id: " . ($replied_to_id ?: 'null') . "\n", FILE_APPEND);
+            @file_put_contents($log_file, "[DEBUG] Detected YA/BATAL. upper_body: $upper_body, replied_to_id: " . ($replied_to_id ?: 'null') . "\n", FILE_APPEND);
             
             $draft = null;
             if ($replied_to_id) {
@@ -112,12 +195,12 @@ class Webhook_wa extends CI_Controller {
             }
             // Jika tidak di-reply ATAU ID tidak ditemukan di DB (karena GOWA tidak return ID), ambil draf terakhir
             if (!$draft) {
-                file_put_contents(FCPATH.'wa.txt', "[DEBUG] Draft not found by replied_to_id, falling back to DESC\n", FILE_APPEND);
+                @file_put_contents($log_file, "[DEBUG] Draft not found by replied_to_id, falling back to DESC\n", FILE_APPEND);
                 $draft = $this->db->order_by('id', 'DESC')->get_where('wa_draft_jurnal', ['status' => 'pending'])->row();
             }
 
             if ($draft) {
-                file_put_contents(FCPATH.'wa.txt', "[DEBUG] Found pending draft ID: {$draft->id}. Processing...\n", FILE_APPEND);
+                @file_put_contents($log_file, "[DEBUG] Found pending draft ID: {$draft->id}. Processing...\n", FILE_APPEND);
                 
                 if ($upper_body === 'BATAL') {
                     $this->db->update('wa_draft_jurnal', ['status' => 'rejected'], ['id' => $draft->id]);
@@ -125,7 +208,7 @@ class Webhook_wa extends CI_Controller {
                 } else {
                     // YA: Simpan ke database
                     $jurnal_data = json_decode($draft->payload_jurnal, true);
-                    file_put_contents(FCPATH.'wa.txt', "[DEBUG] Starting DB transaction with payload: " . json_encode($jurnal_data) . "\n", FILE_APPEND);
+                    @file_put_contents($log_file, "[DEBUG] Starting DB transaction with payload: " . json_encode($jurnal_data) . "\n", FILE_APPEND);
                     
                     // Matikan db_debug agar script tidak mati tiba-tiba jika ada error SQL
                     $this->db->db_debug = FALSE;
@@ -133,14 +216,14 @@ class Webhook_wa extends CI_Controller {
                     
                     foreach ($jurnal_data as $row) {
                         if (!$this->db->insert('jurnal_umum', $row)) {
-                            file_put_contents(FCPATH.'wa.txt', "[DEBUG DB ERROR] " . json_encode($this->db->error()) . "\n", FILE_APPEND);
+                            @file_put_contents($log_file, "[DEBUG DB ERROR] " . json_encode($this->db->error()) . "\n", FILE_APPEND);
                         }
                     }
                     $this->db->trans_complete();
                     $trans_status = $this->db->trans_status();
                     $this->db->db_debug = TRUE; // Kembalikan ke normal
 
-                    file_put_contents(FCPATH.'wa.txt', "[DEBUG] DB transaction complete. Status: " . ($trans_status === FALSE ? 'FAILED' : 'SUCCESS') . "\n", FILE_APPEND);
+                    @file_put_contents($log_file, "[DEBUG] DB transaction complete. Status: " . ($trans_status === FALSE ? 'FAILED' : 'SUCCESS') . "\n", FILE_APPEND);
 
                     if ($trans_status === FALSE) {
                         $this->_send_message($chat_id, "Gagal menyimpan jurnal ke database. Mohon cek log server.", $message_id);
@@ -151,7 +234,7 @@ class Webhook_wa extends CI_Controller {
                 }
                 return $this->_response(['status' => 'state_processed']);
             } else {
-                file_put_contents(FCPATH.'wa.txt', "[DEBUG] NO PENDING DRAFT FOUND AT ALL!\n", FILE_APPEND);
+                @file_put_contents($log_file, "[DEBUG] NO PENDING DRAFT FOUND AT ALL!\n", FILE_APPEND);
             }
         }
 
@@ -160,20 +243,10 @@ class Webhook_wa extends CI_Controller {
         $nama_order_to_process = null;
         $prompt = '';
 
-        if (isset($payload['image'])) {
-            $image_path = null;
-            if (is_string($payload['image'])) {
-                $image_path = $payload['image'];
-            } elseif (is_array($payload['image'])) {
-                $image_path = $payload['image']['path'] ?? null;
-                if (!$image_path) {
-                    $image_path = $payload['image']['url'] ?? null;
-                }
-            }
-            
+        if (!empty($image_path)) {
             $nama_order = $body;
             if (empty($nama_order)) {
-                $sent_msg = $this->_send_message($chat_id, "Silakan balas pesan ini dengan teks keterangan (Nama Order) untuk gambar tersebut:", $message_id);
+                $sent_msg = $this->_send_message($chat_id, "Silakan balas pesan ini dengan teks keterangan (Nama Order) untuk gambar tersebut:\n_(Opsional sertakan tanggal jika berbeda dari nota, contoh: Size Sevencols 14/07/2026)_", $message_id);
                 
                 $bot_msg_id = 'unknown_' . time() . '_' . rand(100, 999);
                 if ($sent_msg) {
@@ -194,7 +267,7 @@ class Webhook_wa extends CI_Controller {
                     'sender_jid' => $sender_jid,
                     'created_at' => date('Y-m-d H:i:s')
                 ]);
-                return $this->_response(['status' => 'waiting_for_name']);
+                return $this->_response(['status' => 'waiting_for_name', 'image_path' => $image_path]);
             } else {
                 $is_processing_image = true;
                 $image_path_to_process = $image_path;
@@ -253,19 +326,19 @@ class Webhook_wa extends CI_Controller {
             $gemini_result = $this->gemini_ocr->process_receipt($base64_image, $nama_order_to_process);
             
             if (!$gemini_result['success']) {
-                file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI ERROR] " . $gemini_result['error'] . "\n", FILE_APPEND);
+                @file_put_contents($log_file, "[DEBUG GEMINI ERROR] " . $gemini_result['error'] . "\n", FILE_APPEND);
                 $this->_send_message($chat_id, "⚠️ Gagal AI Gemini (" . ($gemini_result['error'] ?? 'Error') . ").", $message_id);
                 return $this->_response(['status' => 'gemini_error']);
             }
 
-            file_put_contents(FCPATH.'wa.txt', "[DEBUG GEMINI] Raw Output: \n" . $gemini_result['text'] . "\n", FILE_APPEND);
+            @file_put_contents($log_file, "[DEBUG GEMINI] Raw Output: \n" . $gemini_result['text'] . "\n", FILE_APPEND);
             $prompt = $gemini_result['text'];
         }
 
         $transactions = $this->_parse_prompt($prompt);
         if (empty($transactions)) {
-            file_put_contents(FCPATH.'wa.txt', "[DEBUG] Ignoring message because parsed transactions are empty. Prompt: $prompt\n", FILE_APPEND);
-            if ($is_processing_image || isset($payload['image'])) {
+            @file_put_contents($log_file, "[DEBUG] Ignoring message because parsed transactions are empty. Prompt: $prompt\n", FILE_APPEND);
+            if ($is_processing_image || !empty($image_path)) {
                 $short_prompt = (strlen($prompt) > 250) ? substr($prompt, 0, 250) . '...' : $prompt;
                 $this->_send_message($chat_id, "⚠️ AI Gemini selesai membaca tetapi tidak menemukan format transaksi valid.\n\n*Hasil Teks AI:* \n" . $short_prompt, $message_id);
             }
@@ -365,9 +438,15 @@ class Webhook_wa extends CI_Controller {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
         $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_err = curl_error($ch);
         curl_close($ch);
+
+        $log_file = FCPATH . 'wa.txt';
+        @file_put_contents($log_file, "[SEND MESSAGE] To: $phone, HTTP: $http_code, Err: " . ($curl_err ?: 'none') . ", Res: $response\n", FILE_APPEND);
 
         return json_decode($response, true);
     }
@@ -400,7 +479,6 @@ class Webhook_wa extends CI_Controller {
         }
 
         $candidates = array_unique($candidates);
-
         $attempt_logs = [];
 
         foreach ($candidates as $cand_url) {
@@ -408,7 +486,7 @@ class Webhook_wa extends CI_Controller {
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'X-Device-Id: ' . $device_id,
                 'Authorization: Basic ' . base64_encode($username . ':' . $password)
@@ -436,7 +514,7 @@ class Webhook_wa extends CI_Controller {
                 );
 
                 if ($is_image || (is_string($content_type) && strpos($content_type, 'image/') !== false)) {
-                    file_put_contents(FCPATH.'wa.txt', "[DEBUG DOWNLOAD SUCCESS] $cand_url, Size: " . strlen($data) . " bytes\n", FILE_APPEND);
+                    @file_put_contents(FCPATH.'wa.txt', "[DEBUG DOWNLOAD SUCCESS] $cand_url, Size: " . strlen($data) . " bytes\n", FILE_APPEND);
                     return ['success' => true, 'base64' => base64_encode($data), 'url' => $cand_url, 'size' => strlen($data)];
                 } else {
                     $attempt_logs[] = "$cand_url -> HTTP 200 but not valid image header ($content_type)";
@@ -470,28 +548,27 @@ class Webhook_wa extends CI_Controller {
         return null;
     }
 
-
-
     private function _parse_pe_text($prompt)
     {
         $lines = explode("\n", str_replace("\r", "", $prompt));
-        $current_date = date('Y-m-d');
-        $transactions = [];
-
-        if (preg_match('/(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/', $prompt, $matches)) {
-            if (strlen($matches[1]) == 4) {
-                $current_date = sprintf("%04d-%02d-%02d", $matches[1], $matches[2], $matches[3]);
-            } else {
-                $current_date = sprintf("%04d-%02d-%02d", $matches[3], $matches[2], $matches[1]);
-            }
+        $current_date = $this->_extract_date($prompt);
+        if (!$current_date) {
+            $current_date = date('Y-m-d');
         }
+
+        $transactions = [];
 
         foreach ($lines as $line) {
             $clean_line = trim($line, " \t\n\r\0\x0B*_~\\");
             if (empty($clean_line)) continue;
 
+            $line_date = $this->_extract_date($clean_line);
+            if ($line_date) {
+                $current_date = $line_date;
+            }
+
             // Pattern: Cetak DTF 557CM = Rp 139.250 or 557CM = Rp 139.250 or Cetak DTF 557 CM = Rp 139.250
-            if (preg_match('/^(.*?)\s*(\d+)\s*(?:CM|cm)?\s*=\s*(?:Rp|rp)?\s*([\d\.,]+)$/i', $clean_line, $m)) {
+            if (preg_match('/^(.*?)\s*(\d+)\s*(?:CM|cm)?\s*=\s*(?:Rp|rp)?\s*([\d\.,]+)/i', $clean_line, $m)) {
                 $deskripsi = trim($m[1]);
                 if (empty($deskripsi)) {
                     $deskripsi = 'Cetak DTF';
@@ -532,6 +609,12 @@ class Webhook_wa extends CI_Controller {
     {
         $current_date = date('Y-m-d');
         
+        // Check date in text if present
+        $extracted_date = $this->_extract_date($prompt);
+        if ($extracted_date) {
+            $current_date = $extracted_date;
+        }
+
         // 0. Check PE Order Format (Vendor PE hardcoded)
         $pe_trxs = $this->_parse_pe_text($prompt);
         if (!empty($pe_trxs)) {
@@ -571,12 +654,9 @@ class Webhook_wa extends CI_Controller {
                     $ukuran    = isset($item['ukuran']) ? trim((string)$item['ukuran']) : '1';
                     $modal     = isset($item['modal']) ? (int) preg_replace('/[^\d]/', '', (string)$item['modal']) : 0;
 
-                    if (preg_match('/(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/', $raw_tgl, $m_tgl)) {
-                        if (strlen($m_tgl[1]) == 4) {
-                            $current_date = sprintf("%04d-%02d-%02d", $m_tgl[1], $m_tgl[2], $m_tgl[3]);
-                        } else {
-                            $current_date = sprintf("%04d-%02d-%02d", $m_tgl[3], $m_tgl[2], $m_tgl[1]);
-                        }
+                    $item_date = $this->_extract_date($raw_tgl);
+                    if ($item_date) {
+                        $current_date = $item_date;
                     }
 
                     $harga_jual = 0;
@@ -616,13 +696,10 @@ class Webhook_wa extends CI_Controller {
             $line = trim($line);
             if (empty($line)) continue;
 
-            // 1. Cek Tanggal (DD - MM - YYYY atau YYYY-MM-DD atau DD/MM/YYYY)
-            if (preg_match('/(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{1,4})/', $line, $matches)) {
-                if (strlen($matches[1]) == 4) {
-                    $current_date = sprintf("%04d-%02d-%02d", $matches[1], $matches[2], $matches[3]);
-                } else {
-                    $current_date = sprintf("%04d-%02d-%02d", $matches[3], $matches[2], $matches[1]);
-                }
+            // 1. Cek Tanggal
+            $line_date = $this->_extract_date($line);
+            if ($line_date) {
+                $current_date = $line_date;
                 continue;
             }
 
@@ -639,38 +716,37 @@ class Webhook_wa extends CI_Controller {
                     $left_part = trim($parts[0]);
                 }
                 
-                $dash_parts = preg_split('/\s*-\s*/', $left_part);
+                $dash_parts = explode('-', $left_part);
                 
-                if (count($dash_parts) >= 4) {
+                if (count($dash_parts) >= 5) {
                     $pelanggan = trim($dash_parts[0]);
-                    $suplier   = trim($dash_parts[1]);
+                    $suplier = trim($dash_parts[1]);
                     $deskripsi = trim($dash_parts[2]);
-                    $ukuran    = trim($dash_parts[3]);
-                    
-                    $modal = 0;
-                    if (isset($dash_parts[4])) {
-                        $modal_str = trim($dash_parts[4]);
-                        $modal_str = str_replace(['.', ','], '', $modal_str);
-                        $modal = (int) preg_replace('/[^\d]/', '', $modal_str);
-                    }
+                    $ukuran = trim($dash_parts[3]);
+                    $modal_str = trim($dash_parts[4]);
+                    $modal_str = str_replace(['.', ','], '', $modal_str);
+                    $modal = (int) $modal_str;
                     
                     if ($harga_jual === 0) {
                         $mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
                         $harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
-                        preg_match_all('/\d+/', $ukuran, $matches);
-                        $panjang = (!empty($matches[0])) ? (int) end($matches[0]) : 0;
+                        
+                        preg_match_all('/\d+/', $ukuran, $matches_uk);
+                        $panjang = (!empty($matches_uk[0])) ? (int) end($matches_uk[0]) : 0;
+                        
                         $harga_jual = $panjang * $harga_per_cm;
+                        
                         if ($harga_jual === 0 && $modal > 0) {
                             $harga_jual = $modal;
                         }
                     }
-
+                    
                     $ket = "$pelanggan - $suplier - $deskripsi - $ukuran";
                     $rek_inventory_or_ap = '118';
                     if (stripos($suplier, 'luar(p.riyadi)') !== false) {
                         $rek_inventory_or_ap = '213';
                     }
-
+                    
                     $transactions[] = [
                         'tgl' => $current_date,
                         'ket' => $ket,
@@ -681,75 +757,106 @@ class Webhook_wa extends CI_Controller {
                 }
             }
         }
+
         return $transactions;
     }
 
     private function _build_jurnal_array($transactions)
     {
-        $max_jurnal = $this->db->query("SELECT MAX(CAST(no_jurnal AS UNSIGNED)) as max_val FROM jurnal_umum")->row()->max_val;
-        $max_bukti = $this->db->query("SELECT MAX(CAST(no_bukti AS UNSIGNED)) as max_val FROM jurnal_umum")->row()->max_val;
-        
-        $no_jurnal = $max_jurnal ? $max_jurnal + 1 : 1;
-        $no_bukti = $max_bukti ? $max_bukti + 1 : 1;
-        
-        $rows = [];
-        $tgl_insert = date('Y-m-d H:i:s');
+        $jurnal_rows = [];
+        $max_jurnal = $this->app_model->getMaxJurnal();
+        $current_jurnal = $max_jurnal ? (int)$max_jurnal + 1 : (int)(date('y') . date('m') . '00001');
+
         foreach ($transactions as $trx) {
-            $modal = $trx['modal'];
+            $tgl_jurnal = $trx['tgl'];
+            $ket = $trx['ket'];
             $harga_jual = $trx['harga_jual'];
+            $modal = $trx['modal'];
             $rek_inventory_or_ap = $trx['rek_inventory_or_ap'];
-            
-            // Baris 1: Pendapatan (411) Kredit harga_jual
-            $rows[] = [
-                'tgl_jurnal' => $trx['tgl'],
-                'ket' => $trx['ket'],
-                'no_rek' => '411',
-                'debet' => 0,
-                'kredit' => $harga_jual,
-                'no_jurnal' => str_pad($no_jurnal, 6, "0", STR_PAD_LEFT),
-                'no_bukti' => str_pad($no_bukti, 6, "0", STR_PAD_LEFT),
-                'username' => 'WA Bot',
-                'tgl_insert' => $tgl_insert
-            ];
-            // Baris 2: Piutang (112) Debit harga_jual
-            $rows[] = [
-                'tgl_jurnal' => $trx['tgl'],
-                'ket' => $trx['ket'],
+            $tgl_insert = date('Y-m-d H:i:s');
+            $username = 'WA-BOT';
+
+            // Debet Piutang (112)
+            $jurnal_rows[] = [
+                'no_jurnal' => (string)$current_jurnal,
+                'tgl_jurnal' => $tgl_jurnal,
+                'no_bukti' => '',
+                'ket' => $ket,
                 'no_rek' => '112',
                 'debet' => $harga_jual,
                 'kredit' => 0,
-                'no_jurnal' => str_pad($no_jurnal, 6, "0", STR_PAD_LEFT),
-                'no_bukti' => str_pad($no_bukti, 6, "0", STR_PAD_LEFT),
-                'username' => 'WA Bot',
-                'tgl_insert' => $tgl_insert
+                'tgl_insert' => $tgl_insert,
+                'username' => $username
             ];
-            // Baris 3: Hutang/Kas (213/118) Kredit modal
-            $rows[] = [
-                'tgl_jurnal' => $trx['tgl'],
-                'ket' => $trx['ket'],
-                'no_rek' => $rek_inventory_or_ap,
+
+            // Kredit Pendapatan (411)
+            $jurnal_rows[] = [
+                'no_jurnal' => (string)$current_jurnal,
+                'tgl_jurnal' => $tgl_jurnal,
+                'no_bukti' => '',
+                'ket' => $ket,
+                'no_rek' => '411',
                 'debet' => 0,
-                'kredit' => $modal,
-                'no_jurnal' => str_pad($no_jurnal, 6, "0", STR_PAD_LEFT),
-                'no_bukti' => str_pad($no_bukti, 6, "0", STR_PAD_LEFT),
-                'username' => 'WA Bot',
-                'tgl_insert' => $tgl_insert
+                'kredit' => $harga_jual,
+                'tgl_insert' => $tgl_insert,
+                'username' => $username
             ];
-            // Baris 4: HPP (516) Debit modal
-            $rows[] = [
-                'tgl_jurnal' => $trx['tgl'],
-                'ket' => $trx['ket'],
+
+            // Debet HPP (516)
+            $jurnal_rows[] = [
+                'no_jurnal' => (string)$current_jurnal,
+                'tgl_jurnal' => $tgl_jurnal,
+                'no_bukti' => '',
+                'ket' => $ket,
                 'no_rek' => '516',
                 'debet' => $modal,
                 'kredit' => 0,
-                'no_jurnal' => str_pad($no_jurnal, 6, "0", STR_PAD_LEFT),
-                'no_bukti' => str_pad($no_bukti, 6, "0", STR_PAD_LEFT),
-                'username' => 'WA Bot',
-                'tgl_insert' => $tgl_insert
+                'tgl_insert' => $tgl_insert,
+                'username' => $username
             ];
-            $no_jurnal++;
-            $no_bukti++;
+
+            // Kredit Kas / Hutang (118 atau 213)
+            $jurnal_rows[] = [
+                'no_jurnal' => (string)$current_jurnal,
+                'tgl_jurnal' => $tgl_jurnal,
+                'no_bukti' => '',
+                'ket' => $ket,
+                'no_rek' => $rek_inventory_or_ap,
+                'debet' => 0,
+                'kredit' => $modal,
+                'tgl_insert' => $tgl_insert,
+                'username' => $username
+            ];
+
+            $current_jurnal++;
         }
-        return $rows;
+
+        return $jurnal_rows;
+    }
+
+    public function logs()
+    {
+        header('Content-Type: text/plain; charset=utf-8');
+        $log_file = FCPATH . 'wa.txt';
+        if (file_exists($log_file)) {
+            $content = file_get_contents($log_file);
+            $lines = explode("\n", $content);
+            $recent = array_slice($lines, -150);
+            echo implode("\n", $recent);
+        } else {
+            echo "Log file wa.txt belum ada.";
+        }
+    }
+
+    public function test_send()
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        $target_group = $this->_get_wa_setting('wa_group_id', '120363426581172416@g.us');
+        $res = $this->_send_message($target_group, "🤖 Tes koneksi bot WhatsApp berhasil! (" . date('d-m-Y H:i:s') . ")");
+        echo json_encode([
+            'status' => 'ok',
+            'target_group' => $target_group,
+            'gateway_response' => $res
+        ], JSON_PRETTY_PRINT);
     }
 }

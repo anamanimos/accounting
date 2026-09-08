@@ -153,9 +153,12 @@
                             </div>
                         </div>
 
-                        <div class="d-flex justify-content-end pt-3">
+                        <div class="d-flex justify-content-between align-items-center pt-3">
+                            <button type="button" class="btn btn-light-info" id="btn-test-send">
+                                <i class="ki-outline ki-send fs-2 me-1"></i> Tes Kirim Pesan ke Grup
+                            </button>
                             <button type="submit" class="btn btn-primary">
-                                <i class="ki-outline ki-check-circle fs-2"></i> Simpan Pengaturan WA Gateway
+                                <i class="ki-outline ki-check-circle fs-2 me-1"></i> Simpan Pengaturan WA Gateway
                             </button>
                         </div>
 
@@ -164,8 +167,77 @@
             </div>
             <!--end::Card - Form Configuration-->
 
+            <!--begin::Card - Webhook Log & Diagnostics-->
+            <div class="card shadow-sm mb-8">
+                <div class="card-header border-0 pt-5">
+                    <h3 class="card-title align-items-start flex-column">
+                        <span class="card-label fw-bold text-gray-900">Log Aktivitas & Webhook Terakhir (wa.txt)</span>
+                        <span class="text-muted mt-1 fw-semibold fs-7">Memantau payload webhook dari WA Gateway secara langsung</span>
+                    </h3>
+                    <div class="card-toolbar">
+                        <button type="button" class="btn btn-sm btn-light-primary" id="btn-refresh-logs">
+                            <i class="ki-outline ki-arrows-circle fs-2"></i> Refresh Log
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body py-4">
+                    <pre id="webhook-log-box" class="bg-dark text-success p-4 rounded fs-7 font-monospace" style="max-height: 380px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">Memuat log...</pre>
+                </div>
+            </div>
+            <!--end::Card - Webhook Log & Diagnostics-->
+
         </div>
     </div>
     <!--end::Content-->
 </div>
 <!--end::Content wrapper-->
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function loadLogs() {
+        $.ajax({
+            url: '<?= base_url('webhook_wa/logs') ?>',
+            type: 'GET',
+            cache: false,
+            success: function(res) {
+                $('#webhook-log-box').text(res || 'Log kosong');
+                var box = document.getElementById('webhook-log-box');
+                if (box) box.scrollTop = box.scrollHeight;
+            },
+            error: function() {
+                $('#webhook-log-box').text('Gagal memuat file log wa.txt');
+            }
+        });
+    }
+
+    loadLogs();
+
+    $('#btn-refresh-logs').on('click', function() {
+        loadLogs();
+    });
+
+    $('#btn-test-send').on('click', function() {
+        var btn = $(this);
+        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span> Mengirim...');
+        
+        $.ajax({
+            url: '<?= base_url('whatsapp/test_send') ?>',
+            type: 'POST',
+            dataType: 'json',
+            success: function(res) {
+                btn.prop('disabled', false).html('<i class="ki-outline ki-send fs-2 me-1"></i> Tes Kirim Pesan ke Grup');
+                if (res.http_code == 200 || res.http_code == 201) {
+                    Swal.fire('Berhasil', 'Pesan tes berhasil dikirim ke grup (' + res.group_id + ')', 'success');
+                } else {
+                    Swal.fire('Gagal Kirim', 'HTTP Code: ' + res.http_code + '<br>Error: ' + (res.curl_error || JSON.stringify(res.response)), 'error');
+                }
+                loadLogs();
+            },
+            error: function(xhr) {
+                btn.prop('disabled', false).html('<i class="ki-outline ki-send fs-2 me-1"></i> Tes Kirim Pesan ke Grup');
+                Swal.fire('Error', 'Gagal menghubungi server endpoint: ' + xhr.statusText, 'error');
+            }
+        });
+    });
+});
+</script>

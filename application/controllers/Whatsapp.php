@@ -137,4 +137,49 @@ class Whatsapp extends CI_Controller {
         
         return null;
     }
+
+    public function test_send()
+    {
+        if (!$this->session->userdata('username')) {
+            return $this->output->set_content_type('application/json')->set_status_header(401)->set_output(json_encode(['status' => 'unauthorized']));
+        }
+
+        $gateway_url = rtrim($this->app_model->get_setting('wa_gateway_url', 'https://wag.nams.my.id'), '/');
+        $username    = $this->app_model->get_setting('wa_gateway_username', 'admin');
+        $password    = $this->app_model->get_setting('wa_gateway_password', 'admin');
+        $device_id   = $this->app_model->get_setting('wa_device_id', 'erp-damaijaya');
+        $group_id    = $this->app_model->get_setting('wa_group_id', '120363426581172416@g.us');
+
+        $payload = [
+            'phone' => $group_id,
+            'message' => "🤖 *Tes Pesan dari Sistem Accounting*\n\nKoneksi WA Gateway berhasil terhubung ke server.\nWaktu: " . date('d-m-Y H:i:s'),
+            'isGroup' => true,
+        ];
+
+        $ch = curl_init($gateway_url . '/send/message');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'X-Device-Id: ' . $device_id,
+            'Authorization: Basic ' . base64_encode($username . ':' . $password),
+            'Content-Type: application/json'
+        ]);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_err = curl_error($ch);
+        curl_close($ch);
+
+        $res_data = json_decode($response, true);
+
+        return $this->output->set_content_type('application/json')->set_output(json_encode([
+            'http_code' => $http_code,
+            'curl_error' => $curl_err,
+            'response' => $res_data,
+            'group_id' => $group_id
+        ]));
+    }
 }
