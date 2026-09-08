@@ -274,41 +274,49 @@ class Webhook_wa extends CI_Controller {
                 $nama_order_to_process = $nama_order;
             }
         } else {
-            // Teks biasa. Cek apakah membalas permintaan Nama Order
-            $pending = null;
-            if ($replied_to_id) {
-                $pending = $this->db->get_where('wa_pending_image', ['message_id' => $replied_to_id])->row();
-            }
-            
-            if (!$pending && !empty($sender_jid)) {
-                // Cek latest pending request by sender_jid
-                $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['sender_jid' => $sender_jid])->row();
-            }
-
-            if (!$pending) {
-                // Fallback: Cek latest pending request di grup dalam 15 menit terakhir
-                $fifteen_mins_ago = date('Y-m-d H:i:s', time() - 900);
-                $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['created_at >=' => $fifteen_mins_ago])->row();
-            }
-
-            $override_date = null;
-            if ($pending && !empty($body) && !in_array(strtoupper($body), ['YA', 'BATAL'])) {
-                $this->db->delete('wa_pending_image', ['id' => $pending->id]);
-                
-                $is_processing_image = true;
-                $image_path_to_process = $pending->image_url;
-                
-                // Extract optional date in reply text (e.g. "Size Sevencols 14/07/2026")
-                $custom_date = $this->_extract_date($body);
-                $clean_nama_order = preg_replace('/(?:tgl|tanggal)?\s*[:\.]?\s*\d{1,4}[\/\.-]\d{1,2}[\/\.-]\d{1,4}/i', '', $body);
-                $clean_nama_order = trim($clean_nama_order, " \t\n\r\0\x0B*_~\\");
-                
-                $nama_order_to_process = !empty($clean_nama_order) ? $clean_nama_order : $body;
-                if ($custom_date) {
-                    $override_date = $custom_date;
-                }
-            } else {
+            // Teks biasa.
+            // 1. Cek apakah pesan ini adalah teks transaksi mandiri (misal format order PE atau draf jurnal)
+            $direct_trxs = $this->_parse_prompt($body);
+            if (!empty($direct_trxs)) {
+                // Teks langsung adalah perintah transaksi valid, tidak memerlukan gambar!
                 $prompt = $body;
+            } else {
+                // 2. Jika bukan teks transaksi, cek apakah membalas permintaan Nama Order untuk gambar pending
+                $pending = null;
+                if ($replied_to_id) {
+                    $pending = $this->db->get_where('wa_pending_image', ['message_id' => $replied_to_id])->row();
+                }
+                
+                if (!$pending && !empty($sender_jid)) {
+                    // Cek latest pending request by sender_jid
+                    $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['sender_jid' => $sender_jid])->row();
+                }
+
+                if (!$pending) {
+                    // Fallback: Cek latest pending request di grup dalam 15 menit terakhir
+                    $fifteen_mins_ago = date('Y-m-d H:i:s', time() - 900);
+                    $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['created_at >=' => $fifteen_mins_ago])->row();
+                }
+
+                $override_date = null;
+                if ($pending && !empty($body) && !in_array(strtoupper($body), ['YA', 'BATAL'])) {
+                    $this->db->delete('wa_pending_image', ['id' => $pending->id]);
+                    
+                    $is_processing_image = true;
+                    $image_path_to_process = $pending->image_url;
+                    
+                    // Extract optional date in reply text (e.g. "Size Sevencols 14/07/2026")
+                    $custom_date = $this->_extract_date($body);
+                    $clean_nama_order = preg_replace('/(?:tgl|tanggal)?\s*[:\.]?\s*\d{1,4}[\/\.-]\d{1,2}[\/\.-]\d{1,4}/i', '', $body);
+                    $clean_nama_order = trim($clean_nama_order, " \t\n\r\0\x0B*_~\\");
+                    
+                    $nama_order_to_process = !empty($clean_nama_order) ? $clean_nama_order : $body;
+                    if ($custom_date) {
+                        $override_date = $custom_date;
+                    }
+                } else {
+                    $prompt = $body;
+                }
             }
         }
 
@@ -473,7 +481,13 @@ class Webhook_wa extends CI_Controller {
         $raw_path = $url;
         $candidates = [];
 
+        $append_device = function($u) use ($device_id) {
+            $sep = (strpos($u, '?') !== false) ? '&' : '?';
+            return $u . $sep . 'device_id=' . urlencode($device_id);
+        };
+
         if (strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0) {
+            $candidates[] = $append_device($url);
             $candidates[] = $url;
             $parsed_path = ltrim(parse_url($url, PHP_URL_PATH), '/');
             if (!empty($parsed_path)) {
@@ -483,11 +497,14 @@ class Webhook_wa extends CI_Controller {
 
         $clean_path = ltrim($raw_path, '/');
         if (!empty($clean_path)) {
+            $candidates[] = $append_device($gateway_url . '/' . $clean_path);
             $candidates[] = $gateway_url . '/' . $clean_path;
+            $candidates[] = $append_device($gateway_url . '/app/media?path=' . urlencode($clean_path));
             $candidates[] = $gateway_url . '/app/media?path=' . urlencode($clean_path);
+            $candidates[] = $append_device($gateway_url . '/media?path=' . urlencode($clean_path));
             $candidates[] = $gateway_url . '/media?path=' . urlencode($clean_path);
-            $candidates[] = $gateway_url . '/app/files/' . $clean_path;
-            $candidates[] = $gateway_url . '/files/' . $clean_path;
+            $candidates[] = $append_device($gateway_url . '/app/files/' . $clean_path);
+            $candidates[] = $append_device($gateway_url . '/files/' . $clean_path);
         }
 
         $candidates = array_unique($candidates);
@@ -510,9 +527,13 @@ class Webhook_wa extends CI_Controller {
             curl_close($ch);
 
             if ($http_code === 200 && !empty($data)) {
-                // Ignore HTML error pages
+                // Ignore HTML error pages or JSON error responses
                 if (strpos($data, '<!DOCTYPE') !== false || strpos($data, '<html') !== false) {
                     $attempt_logs[] = "$cand_url -> HTTP 200 but HTML error page";
+                    continue;
+                }
+                if (strpos(trim($data), '{"code":') === 0 || strpos(trim($data), '{"error":') === 0 || strpos(trim($data), '{"message":') === 0) {
+                    $attempt_logs[] = "$cand_url -> HTTP 200 but JSON error: " . substr(trim($data), 0, 100);
                     continue;
                 }
 
@@ -613,17 +634,20 @@ class Webhook_wa extends CI_Controller {
         $transactions = [];
 
         foreach ($lines as $line) {
-            $clean_line = trim($line, " \t\n\r\0\x0B*_~\\");
-            if (empty($clean_line)) continue;
+            $strip_line = trim(str_replace(['*', '_', '~'], '', $line));
+            if (empty($strip_line)) continue;
 
-            $line_date = $this->_extract_date($clean_line);
-            if ($line_date) {
+            $line_date = $this->_extract_date($strip_line);
+            if ($line_date && !preg_match('/(?:CM|cm|m)\s*(?:=|:)/i', $strip_line)) {
                 $current_date = $line_date;
+                continue;
             }
 
-            // Pattern: Cetak DTF 557CM = Rp 139.250 or 557CM = Rp 139.250 or Cetak DTF 557 CM = Rp 139.250
-            if (preg_match('/^(.*?)\s*(\d+)\s*(?:CM|cm)?\s*=\s*(?:Rp|rp)?\s*([\d\.,]+)/i', $clean_line, $m)) {
+            // Pattern: Cetak DTF 557CM = Rp 139.250 or 557CM = Rp 139.250 or Cetak DTF 557 CM = Rp 139.250 or Cetak DTF 557 CM: Rp 139.250
+            if (preg_match('/^(.*?)\s*(\d+)\s*(?:CM|cm|m)?\s*(?:=|:)\s*(?:Rp|rp)?\.?\s*([\d\.,]+)/i', $strip_line, $m)) {
                 $deskripsi = trim($m[1]);
+                $deskripsi = preg_replace('/^[\s\-\*•\d\.\)]+/', '', $deskripsi);
+                $deskripsi = trim($deskripsi);
                 if (empty($deskripsi)) {
                     $deskripsi = 'Cetak DTF';
                 }
