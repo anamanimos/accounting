@@ -144,125 +144,19 @@ class Jurnal_umum extends CI_Controller {
 				->set_output(json_encode(['status' => 'error', 'message' => 'Teks prompt kosong.']));
 		}
 
-		$lines = explode("\n", str_replace("\r", "", $prompt));
-		
-		$current_date = date('Y-m-d');
-		$transactions = [];
-		
-		foreach ($lines as $line) {
-			$clean_line = trim($line, " \t\n\r\0\x0B*_~\\");
-			if (empty($clean_line)) continue;
-
-			// 0. Cek Format PE (Cetak DTF 557CM = Rp 139.250)
-			if (preg_match('/^(.*?)\s*(\d+)\s*(?:CM|cm)?\s*=\s*(?:Rp|rp)?\s*([\d\.,]+)$/i', $clean_line, $m)) {
-				$deskripsi = trim($m[1]);
-				if (empty($deskripsi)) {
-					$deskripsi = 'Cetak DTF';
-				}
-				$ukuran = trim($m[2]);
-				$modal_str = str_replace(['.', ','], '', trim($m[3]));
-				$modal = (int) preg_replace('/[^\d]/', '', $modal_str);
-
-				$pelanggan = 'Sevencols';
-				$suplier   = 'PE';
-
-				$harga_jual = 0;
-				$mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
-				$harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
-				$panjang = (int) $ukuran;
-				$harga_jual = $panjang * $harga_per_cm;
-				if ($harga_jual === 0 && $modal > 0) {
-					$harga_jual = $modal;
-				}
-
-				$ket = "$pelanggan - $suplier - $deskripsi - $ukuran";
-				$rek_inventory_or_ap = '118';
-
-				$transactions[] = [
-					'tgl' => $current_date,
-					'ket' => $ket,
-					'harga_jual' => $harga_jual,
-					'modal' => $modal,
-					'rek_inventory_or_ap' => $rek_inventory_or_ap
-				];
-				continue;
-			}
-
-			// 1. Cek Tanggal
-			$this->load->library('gemini_ocr');
-			$parsed_date = $this->gemini_ocr->parse_date_indonesia($clean_line);
-			if ($parsed_date) {
-				$current_date = $parsed_date;
-				continue;
-			}
-
-			// 2. Cek baris Transaksi
-			if (strpos($line, ' - ') !== false) {
-				$harga_jual = 0;
-				$left_part = $line;
-
-				if (strpos($line, '|') !== false) {
-					$parts = explode('|', $line);
-					$harga_jual = (int) trim($parts[1]);
-					$left_part = trim($parts[0]);
-				}
-				
-				$dash_parts = explode(' - ', $left_part);
-				
-				if (count($dash_parts) >= 5) {
-					$pelanggan = trim($dash_parts[0]);
-					$suplier = trim($dash_parts[1]);
-					$deskripsi = trim($dash_parts[2]);
-					$ukuran = trim($dash_parts[3]);
-					$modal = (int) trim($dash_parts[4]);
-					
-					// Jika harga jual tidak diinput manual
-					if ($harga_jual === 0) {
-						// Karena produk hanya 1, langsung ambil harga dari master_harga tanpa mencocokkan deskripsi
-						$mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
-						
-						if (!$mh) {
-							return $this->output->set_content_type('application/json')
-								->set_status_header(400)
-								->set_output(json_encode(['status' => 'error', 'message' => "Harga belum disetel di Master Harga."]));
-						}
-						
-						$harga_per_cm = $mh->harga_jual;
-						
-						preg_match_all('/\d+/', $ukuran, $matches);
-						$panjang = (!empty($matches[0])) ? (int) end($matches[0]) : 0;
-						
-						$harga_jual = $panjang * $harga_per_cm;
-					}
-
-					$ket = "$pelanggan - $suplier - $deskripsi - $ukuran";
-					
-					// Rekening Logika berdasarkan supplier
-					$rek_inventory_or_ap = '118'; // Default: Kas/Bank
-					if (stripos($suplier, 'luar(p.riyadi)') !== false) {
-						$rek_inventory_or_ap = '213'; // Hutang
-					}
-
-					$transactions[] = [
-						'tgl' => $current_date,
-						'ket' => $ket,
-						'harga_jual' => $harga_jual,
-						'modal' => $modal,
-						'rek_inventory_or_ap' => $rek_inventory_or_ap
-					];
-				}
-			}
-		}
+		$transactions = $this->_parse_prompt_text($prompt);
 
 		if (empty($transactions)) {
 			return $this->output->set_content_type('application/json')
 				->set_status_header(400)
-				->set_output(json_encode(['status' => 'error', 'message' => 'Tidak ada transaksi valid. Pastikan format: [Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga]']));
+				->set_output(json_encode(['status' => 'error', 'message' => 'Tidak ada transaksi valid ditemukan dalam teks. Pastikan format mengandung order PE (contoh: Cetak DTF 4700CM = Rp 1.175.000) atau format: [Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga]']));
 		}
 
 		// Auto-fetch no_jurnal dan no_bukti dari Database
-		$max_jurnal = $this->db->query("SELECT MAX(CAST(no_jurnal AS UNSIGNED)) as max_val FROM jurnal_umum")->row()->max_val;
-		$max_bukti = $this->db->query("SELECT MAX(CAST(no_bukti AS UNSIGNED)) as max_val FROM jurnal_umum")->row()->max_val;
+		$max_jurnal_row = $this->db->query("SELECT MAX(CAST(no_jurnal AS UNSIGNED)) as max_val FROM jurnal_umum")->row();
+		$max_jurnal = $max_jurnal_row ? $max_jurnal_row->max_val : null;
+		$max_bukti_row = $this->db->query("SELECT MAX(CAST(no_bukti AS UNSIGNED)) as max_val FROM jurnal_umum")->row();
+		$max_bukti = $max_bukti_row ? $max_bukti_row->max_val : null;
 		
 		$current_jurnal = $max_jurnal ? (int)$max_jurnal + 1 : (int)(date('y') . date('m') . '00001');
 		$current_bukti = $max_bukti ? (int)$max_bukti + 1 : (int)(date('y') . date('m') . '001');
@@ -300,6 +194,265 @@ class Jurnal_umum extends CI_Controller {
 
 		return $this->output->set_content_type('application/json')
 			->set_output(json_encode(['status' => 'success', 'data' => $preview_data]));
+	}
+
+	private function _extract_date($text)
+	{
+		if (empty($text) || !is_string($text)) return null;
+
+		$text = trim($text);
+
+		$month_map = [
+			'januari' => 1, 'jan' => 1, 'january' => 1,
+			'februari' => 2, 'feb' => 2, 'february' => 2,
+			'maret' => 3, 'mar' => 3, 'march' => 3,
+			'april' => 4, 'apr' => 4,
+			'mei' => 5, 'may' => 5,
+			'juni' => 6, 'jun' => 6, 'june' => 6,
+			'juli' => 7, 'jul' => 7, 'july' => 7,
+			'agustus' => 8, 'agu' => 8, 'agt' => 8, 'august' => 8, 'aug' => 8,
+			'september' => 9, 'sep' => 9, 'sept' => 9,
+			'oktober' => 10, 'okt' => 10, 'october' => 10, 'oct' => 10,
+			'november' => 11, 'nov' => 11,
+			'desember' => 12, 'des' => 12, 'december' => 12, 'dec' => 12
+		];
+
+		// 1. Text Month Name match: e.g. "14 Juli 2026", "14-Juli-2026", "14 Jul 26", "Juli 14, 2026"
+		if (preg_match('/(\d{1,2})[\s\/\.-]+([a-zA-Z]{3,10})[\s\/\.-]+(\d{2,4})/i', $text, $m)) {
+			$day = (int)$m[1];
+			$month_name = strtolower($m[2]);
+			$year = (int)$m[3];
+
+			if (isset($month_map[$month_name])) {
+				$month = $month_map[$month_name];
+				if ($year < 100) $year += 2000;
+				if ($day >= 1 && $day <= 31 && $month >= 1 && $month <= 12) {
+					return sprintf("%04d-%02d-%02d", $year, $month, $day);
+				}
+			}
+		}
+
+		// 2. Numeric Date match: e.g. "14/07/2026", "14-07-26", "2026-07-14", "14.07.2026", "14 - 07 - 2026"
+		if (preg_match('/(?:tgl|tanggal)?\s*[:\.]?\s*(\d{1,4})\s*[\/\.-]\s*(\d{1,2})\s*[\/\.-]\s*(\d{1,4})/i', $text, $m)) {
+			$p1 = (int)$m[1];
+			$p2 = (int)$m[2];
+			$p3 = (int)$m[3];
+
+			if (strlen($m[1]) == 4) {
+				// Format YYYY-MM-DD
+				$year = $p1;
+				$month = $p2;
+				$day = $p3;
+			} else {
+				// Format DD-MM-YYYY or DD-MM-YY
+				$day = $p1;
+				$month = $p2;
+				$year = $p3;
+				if ($year < 100) $year += 2000;
+			}
+
+			if ($day >= 1 && $day <= 31 && $month >= 1 && $month <= 12 && $year >= 2000 && $year <= 2099) {
+				return sprintf("%04d-%02d-%02d", $year, $month, $day);
+			}
+		}
+
+		return null;
+	}
+
+	private function _parse_pe_text($prompt)
+	{
+		$lines = explode("\n", str_replace("\r", "", $prompt));
+		$current_date = $this->_extract_date($prompt);
+		if (!$current_date) {
+			$current_date = date('Y-m-d');
+		}
+
+		$transactions = [];
+
+		foreach ($lines as $line) {
+			$strip_line = trim(str_replace(['*', '_', '~'], '', $line));
+			if (empty($strip_line)) continue;
+
+			$line_date = $this->_extract_date($strip_line);
+			if ($line_date && !preg_match('/(?:CM|cm|m)\s*(?:=|:)/i', $strip_line)) {
+				$current_date = $line_date;
+				continue;
+			}
+
+			// Pattern: Cetak DTF 557CM = Rp 139.250 or 557CM = Rp 139.250 or Cetak DTF 557 CM = Rp 139.250 or Cetak DTF 557 CM: Rp 139.250
+			if (preg_match('/^(.*?)\s*(\d+)\s*(?:CM|cm|m)?\s*(?:=|:)\s*(?:Rp|rp)?\.?\s*([\d\.,]+)/i', $strip_line, $m)) {
+				$deskripsi = trim($m[1]);
+				$deskripsi = preg_replace('/^[\s\-\*•\d\.\)]+/', '', $deskripsi);
+				$deskripsi = trim($deskripsi);
+				if (empty($deskripsi)) {
+					$deskripsi = 'Cetak DTF';
+				}
+				$ukuran = trim($m[2]);
+				$modal_str = str_replace(['.', ','], '', trim($m[3]));
+				$modal = (int) preg_replace('/[^\d]/', '', $modal_str);
+
+				$pelanggan = 'Sevencols';
+				$suplier   = 'PE';
+
+				$harga_jual = 0;
+				$mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
+				$harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
+				$panjang = (int) $ukuran;
+				$harga_jual = $panjang * $harga_per_cm;
+				if ($harga_jual === 0 && $modal > 0) {
+					$harga_jual = $modal;
+				}
+
+				$ket = "$pelanggan - $suplier - $deskripsi - $ukuran";
+				$rek_inventory_or_ap = '118';
+
+				$transactions[] = [
+					'tgl' => $current_date,
+					'ket' => $ket,
+					'harga_jual' => $harga_jual,
+					'modal' => $modal,
+					'rek_inventory_or_ap' => $rek_inventory_or_ap
+				];
+			}
+		}
+
+		return $transactions;
+	}
+
+	private function _parse_prompt_text($prompt)
+	{
+		// 1. First try PE Order format
+		$pe_trxs = $this->_parse_pe_text($prompt);
+		if (!empty($pe_trxs)) {
+			return $pe_trxs;
+		}
+
+		// 2. Direct JSON Array Support
+		$clean_json = '';
+		if (preg_match('/\[\s*\{[\s\S]*\}\s*\]/', $prompt, $matches)) {
+			$clean_json = $matches[0];
+		} elseif (strpos(trim($prompt), '[') === 0) {
+			$clean_json = $prompt;
+		}
+
+		if (!empty($clean_json)) {
+			$json_data = json_decode($clean_json, true);
+			if (is_array($json_data) && count($json_data) > 0) {
+				$transactions = [];
+				$current_date = date('Y-m-d');
+				foreach ($json_data as $item) {
+					$raw_tgl   = $item['tanggal'] ?? date('Y-m-d');
+					$pelanggan = !empty($item['pelanggan']) ? trim($item['pelanggan']) : 'Sevencols';
+					$suplier   = !empty($item['suplier']) ? trim($item['suplier']) : 'Suplier Utama';
+					$deskripsi = !empty($item['deskripsi']) ? trim($item['deskripsi']) : 'Nota AI';
+					$ukuran    = isset($item['ukuran']) ? trim((string)$item['ukuran']) : '1';
+					$modal     = isset($item['modal']) ? (int) preg_replace('/[^\d]/', '', (string)$item['modal']) : 0;
+
+					$item_date = $this->_extract_date($raw_tgl);
+					if ($item_date) {
+						$current_date = $item_date;
+					}
+
+					$harga_jual = 0;
+					$mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
+					$harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
+					preg_match_all('/\d+/', $ukuran, $matches_uk);
+					$panjang = (!empty($matches_uk[0])) ? (int) end($matches_uk[0]) : 0;
+					$harga_jual = $panjang * $harga_per_cm;
+					if ($harga_jual === 0 && $modal > 0) {
+						$harga_jual = $modal;
+					}
+
+					$ket = "$pelanggan - $suplier - $deskripsi - $ukuran";
+					$rek_inventory_or_ap = '118';
+					if (stripos($suplier, 'luar(p.riyadi)') !== false) {
+						$rek_inventory_or_ap = '213';
+					}
+
+					$transactions[] = [
+						'tgl' => $current_date,
+						'ket' => $ket,
+						'harga_jual' => $harga_jual,
+						'modal' => $modal,
+						'rek_inventory_or_ap' => $rek_inventory_or_ap
+					];
+				}
+				if (!empty($transactions)) {
+					return $transactions;
+				}
+			}
+		}
+
+		// 3. Fallback to standard line-by-line format
+		$lines = explode("\n", str_replace("\r", "", $prompt));
+		$current_date = $this->_extract_date($prompt) ?: date('Y-m-d');
+		$transactions = [];
+
+		foreach ($lines as $line) {
+			$clean_line = trim($line, " \t\n\r\0\x0B*_~\\");
+			if (empty($clean_line)) continue;
+
+			$line_date = $this->_extract_date($clean_line);
+			if ($line_date) {
+				$current_date = $line_date;
+				continue;
+			}
+
+			if (strpos($line, '-') !== false || strpos($line, '|') !== false) {
+				$harga_jual = 0;
+				$left_part = $line;
+
+				if (strpos($line, '|') !== false) {
+					$parts = explode('|', $line);
+					$harga_str = trim($parts[1]);
+					$harga_str = str_replace(['.', ','], '', $harga_str);
+					$harga_jual = (int) $harga_str;
+					$left_part = trim($parts[0]);
+				}
+				
+				$dash_parts = explode('-', $left_part);
+				
+				if (count($dash_parts) >= 5) {
+					$pelanggan = trim($dash_parts[0]);
+					$suplier = trim($dash_parts[1]);
+					$deskripsi = trim($dash_parts[2]);
+					$ukuran = trim($dash_parts[3]);
+					$modal_str = trim($dash_parts[4]);
+					$modal_str = str_replace(['.', ','], '', $modal_str);
+					$modal = (int) $modal_str;
+					
+					if ($harga_jual === 0) {
+						$mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
+						$harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
+						
+						preg_match_all('/\d+/', $ukuran, $matches_uk);
+						$panjang = (!empty($matches_uk[0])) ? (int) end($matches_uk[0]) : 0;
+						
+						$harga_jual = $panjang * $harga_per_cm;
+						
+						if ($harga_jual === 0 && $modal > 0) {
+							$harga_jual = $modal;
+						}
+					}
+
+					$ket = "$pelanggan - $suplier - $deskripsi - $ukuran";
+					$rek_inventory_or_ap = '118';
+					if (stripos($suplier, 'luar(p.riyadi)') !== false) {
+						$rek_inventory_or_ap = '213';
+					}
+
+					$transactions[] = [
+						'tgl' => $current_date,
+						'ket' => $ket,
+						'harga_jual' => $harga_jual,
+						'modal' => $modal,
+						'rek_inventory_or_ap' => $rek_inventory_or_ap
+					];
+				}
+			}
+		}
+
+		return $transactions;
 	}
 
 	public function jurnal_auto_save()

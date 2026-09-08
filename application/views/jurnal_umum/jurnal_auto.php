@@ -29,7 +29,7 @@
                         <div class="card-header border-0 pt-5">
                             <h3 class="card-title align-items-start flex-column">
                                 <span class="card-label fw-bold text-gray-900">Format Perintah</span>
-                                <span class="text-muted mt-1 fw-semibold fs-7">Aturan penulisan teks input</span>
+                                <span class="text-muted mt-1 fw-semibold fs-7">Mendukung format chat PE &amp; format standar</span>
                             </h3>
                         </div>
                         <div class="card-body pt-5">
@@ -39,25 +39,55 @@
                                     <span class="fw-semibold text-gray-800 fs-6">No. Jurnal &amp; No. Bukti otomatis dari database</span>
                                 </div>
                             </div>
-                            <ul class="text-gray-700 fs-6 lh-lg mb-5" style="list-style-type: none; padding-left: 0;">
-                                <li><code class="bg-light p-1 rounded text-primary">DD - MM - YYYY</code> <br><span class="text-muted fs-7">Tanggal transaksi (baris pertama)</span></li>
-                                <li class="mt-3"><code class="bg-light p-1 rounded text-success">[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga Jual]</code><br><span class="text-muted fs-7">Baris transaksi &rarr; otomatis 4 jurnal. <b>Note:</b> <code>|[Harga Jual]</code> bersifat opsional. Jika dikosongkan, sistem akan mengalikan harga di Master Harga dengan ukuran.</span></li>
-                            </ul>
-                            
-                            <div class="separator mb-5"></div>
-                            
-                            <div class="notice d-flex bg-light-warning rounded border-warning border border-dashed mb-4 p-3">
-                                <div class="d-flex flex-column fs-7">
-                                    <span class="fw-bold text-gray-800">Aturan Supplier:</span>
-                                    <span class="text-muted mt-1"><b>Luar(P.Riyadi)</b> &rarr; Rek 213 (Hutang)</span>
-                                    <span class="text-muted"><b>Lainnya</b> &rarr; Rek 118 (Kas/Bank)</span>
+
+                            <!-- Opsi 1: Format Order PE -->
+                            <div class="card bg-light-primary border border-primary border-dashed p-4 mb-4">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge badge-primary">Format 1: Chat Order PE (WA)</span>
+                                    <button type="button" class="btn btn-xs btn-sm btn-primary py-1 px-2" onclick="copySamplePE()">
+                                        <i class="ki-outline ki-copy fs-6"></i> Gunakan Contoh
+                                    </button>
                                 </div>
+                                <span class="text-muted fs-7">Cukup salin &amp; tempel langsung chat konfirmasi dari WhatsApp:</span>
+                                <div class="bg-white rounded p-3 text-gray-700 font-monospace fs-8 mt-2" style="white-space: pre-wrap;" id="sample_pe_text">❗Mohon untuk di cek ulang filenya apakah sudah benar kak?
+
+Cetak DTF 4700CM = Rp 1.175.000
+
+❗Mohon transfer sesuai nominal di atas ya❗
+
+Transfer ke no rekening di bawah ini
+
+BCA a/n Andrias Abadi Auw 8630447241 
+BRI a/n Andrias Abadi Auw 058401002241569
+
+❗Pesanan baru bisa di proses ketika pelanggan sudah mengirim bukti transfer❗
+
+bisa juga lewat marketplace
+Shopee https://shopee.co.id/pe.production.malang</div>
+                            </div>
+
+                            <!-- Opsi 2: Format Standar Baris Jurnal -->
+                            <div class="card bg-light-success border border-success border-dashed p-4 mb-4">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge badge-success">Format 2: Standar Multi-Baris</span>
+                                    <button type="button" class="btn btn-xs btn-sm btn-success py-1 px-2" onclick="copySampleStandard()">
+                                        <i class="ki-outline ki-copy fs-6"></i> Gunakan Contoh
+                                    </button>
+                                </div>
+                                <span class="text-muted fs-7 mb-2">Format baris per baris:</span>
+                                <code class="bg-white p-2 rounded text-success fs-8 d-block mt-1">[Pelanggan] - [Suplier] - [Deskripsi] - [Ukuran] - [Modal]|[Harga Jual]</code>
+                                <div class="bg-white rounded p-3 text-gray-700 font-monospace fs-8 mt-2" style="white-space: pre-wrap;" id="sample_standard_text">18 - 09 - 2025
+Sevencols - Luar(P.Riyadi) - DTF KBKA TAZZAKA-18-9-25 - A4 - 10000|15000
+Sevencols - PE - Cetak DTF - 557 - 139250</div>
                             </div>
                             
-                            <h5 class="text-gray-900 fw-bold mb-3">Contoh:</h5>
-                            <div class="bg-light rounded p-4 text-gray-600 font-monospace fs-7" style="white-space: pre-wrap;">18 - 09 - 2025
-Sevencols - Luar(P.Riyadi) - DTF KBKA TAZZAKA-18-9-25 - A4 - 10000|15000
-Budi - TokoABC - DTF - 58x100cm - 5000  (Tanpa Harga Jual, dihitung otomatis)</div>
+                            <div class="notice d-flex bg-light-warning rounded border-warning border border-dashed mb-2 p-3">
+                                <div class="d-flex flex-column fs-7">
+                                    <span class="fw-bold text-gray-800">Aturan Supplier &amp; Rekening:</span>
+                                    <span class="text-muted mt-1"><b>PE / Lainnya</b> &rarr; Rek 118 (Kas/Bank)</span>
+                                    <span class="text-muted"><b>Luar(P.Riyadi)</b> &rarr; Rek 213 (Hutang)</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -69,11 +99,11 @@ Budi - TokoABC - DTF - 58x100cm - 5000  (Tanpa Harga Jual, dihitung otomatis)</d
                         <div class="card-header border-0 pt-5">
                             <h3 class="card-title align-items-start flex-column">
                                 <span class="card-label fw-bold text-gray-900">Input Transaksi</span>
-                                <span class="text-muted mt-1 fw-semibold fs-7">Tempel teks pesanan Anda di sini</span>
+                                <span class="text-muted mt-1 fw-semibold fs-7">Tempel teks pesanan Anda di sini (Format Chat PE atau Standar)</span>
                             </h3>
                         </div>
                         <div class="card-body">
-                            <textarea id="prompt_text" class="form-control form-control-solid font-monospace fs-6" rows="15" placeholder="18 - 09 - 2025&#10;Sevencols - Luar(P.Riyadi) - DTF KBKA TAZZAKA-18-9-25 - A4 - 10000|10000"></textarea>
+                            <textarea id="prompt_text" class="form-control form-control-solid font-monospace fs-6" rows="16" placeholder="Tempel seluruh teks chat WhatsApp atau format baris pesanan di sini...&#10;&#10;Contoh:&#10;Cetak DTF 4700CM = Rp 1.175.000&#10;&#10;Atau:&#10;18 - 09 - 2025&#10;Sevencols - Luar(P.Riyadi) - DTF KBKA TAZZAKA - A4 - 10000|15000"></textarea>
                             
                             <div class="d-flex justify-content-end mt-5">
                                 <button type="button" class="btn btn-primary" id="btn_preview">
@@ -264,4 +294,32 @@ document.getElementById('btn_save_jurnal').addEventListener('click', function() 
         }
     });
 });
+
+function copySamplePE() {
+    var txt = document.getElementById('sample_pe_text').textContent;
+    document.getElementById('prompt_text').value = txt;
+    document.getElementById('prompt_text').focus();
+    Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Contoh teks order PE berhasil disalin ke input!',
+        showConfirmButton: false,
+        timer: 2000
+    });
+}
+
+function copySampleStandard() {
+    var txt = document.getElementById('sample_standard_text').textContent;
+    document.getElementById('prompt_text').value = txt;
+    document.getElementById('prompt_text').focus();
+    Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Contoh format standar berhasil disalin ke input!',
+        showConfirmButton: false,
+        timer: 2000
+    });
+}
 </script>
