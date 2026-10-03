@@ -94,13 +94,11 @@
                             <div class="col-md-6">
                                 <label class="form-label required fw-bold text-gray-800 fs-6">Model Gemini Default</label>
                                 <select name="gemini_model" id="gemini_model_select" class="form-select form-select-solid">
-                                    <option value="gemini-2.5-flash" <?php echo ($gemini_model == 'gemini-2.5-flash') ? 'selected' : ''; ?>>gemini-2.5-flash (⭐ Sangat Direkomendasikan - Cepat & Akurat)</option>
-                                    <option value="gemini-2.0-flash" <?php echo ($gemini_model == 'gemini-2.0-flash') ? 'selected' : ''; ?>>gemini-2.0-flash (Flash Vision v2.0)</option>
-                                    <option value="gemini-flash-latest" <?php echo ($gemini_model == 'gemini-flash-latest') ? 'selected' : ''; ?>>gemini-flash-latest (Alias Flash Terbaru)</option>
+                                    <option value="gemini-flash-latest" <?php echo ($gemini_model == 'gemini-flash-latest' || empty($gemini_model)) ? 'selected' : ''; ?>>gemini-flash-latest (⭐ Sangat Direkomendasikan - Flash Terbaru)</option>
+                                    <option value="gemini-3.8-flash" <?php echo ($gemini_model == 'gemini-3.8-flash') ? 'selected' : ''; ?>>gemini-3.8-flash (Model Flash v3.8 Terkini)</option>
+                                    <option value="gemini-2.5-flash-lite" <?php echo ($gemini_model == 'gemini-2.5-flash-lite') ? 'selected' : ''; ?>>gemini-2.5-flash-lite (Super Cepat & Hemat Kuota)</option>
+                                    <option value="gemini-3.5-flash" <?php echo ($gemini_model == 'gemini-3.5-flash') ? 'selected' : ''; ?>>gemini-3.5-flash (Flash v3.5)</option>
                                     <option value="gemini-2.5-pro" <?php echo ($gemini_model == 'gemini-2.5-pro') ? 'selected' : ''; ?>>gemini-2.5-pro (Akurasi Tinggi untuk Nota Kompleks)</option>
-                                    <option value="gemini-3.6-flash" <?php echo ($gemini_model == 'gemini-3.6-flash') ? 'selected' : ''; ?>>gemini-3.6-flash (Versi 3.6 Flash)</option>
-                                    <option value="gemini-3.5-flash" <?php echo ($gemini_model == 'gemini-3.5-flash') ? 'selected' : ''; ?>>gemini-3.5-flash (Versi 3.5 Flash)</option>
-                                    <option value="gemini-2.0-flash-lite" <?php echo ($gemini_model == 'gemini-2.0-flash-lite') ? 'selected' : ''; ?>>gemini-2.0-flash-lite (Super Ringan & Cepat)</option>
                                     <option value="gemini-pro-latest" <?php echo ($gemini_model == 'gemini-pro-latest') ? 'selected' : ''; ?>>gemini-pro-latest (Pro Terbaru)</option>
                                 </select>
                             </div>

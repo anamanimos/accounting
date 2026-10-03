@@ -27,7 +27,7 @@ class Gemini_ocr {
         if (empty($key) && class_exists('Env')) {
             $key = Env::get('GEMINI_API_KEY');
         }
-        return trim($key);
+        return trim($key ?? '');
     }
 
     /**
@@ -44,7 +44,7 @@ class Gemini_ocr {
         if (empty($key) && class_exists('Env')) {
             $key = Env::get('GEMINI_API_KEY');
         }
-        return trim($key);
+        return trim($key ?? '');
     }
 
     public function get_api_key() {
@@ -116,16 +116,23 @@ class Gemini_ocr {
     /**
      * Helper to call Gemini API trying multiple endpoints (v1beta, v1) and model candidates
      */
-    protected function call_gemini_api($payload, $api_key, $primary_model = 'gemini-1.5-flash') {
+    protected function call_gemini_api($payload, $api_key, $primary_model = 'gemini-flash-latest') {
         $endpoints = ['v1beta'];
         $primary_model = str_replace('models/', '', trim($primary_model));
 
+        // Auto-migrate obsolete or deprecated models to gemini-flash-latest
+        if (empty($primary_model) || in_array($primary_model, ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.0-pro'])) {
+            $primary_model = 'gemini-flash-latest';
+        }
+
         $models_to_try = array_unique(array_filter([
             $primary_model,
-            'gemini-2.5-flash',
-            'gemini-2.0-flash',
             'gemini-flash-latest',
-            'gemini-1.5-flash'
+            'gemini-3.8-flash',
+            'gemini-2.5-flash-lite',
+            'gemini-3.5-flash',
+            'gemini-flash-lite-latest',
+            'gemini-2.5-pro'
         ]));
 
         $last_response = '';
@@ -222,13 +229,13 @@ class Gemini_ocr {
     /**
      * Test Gemini API Connection
      */
-    public function test_gemini($custom_key = null, $custom_model = 'gemini-1.5-flash') {
+    public function test_gemini($custom_key = null, $custom_model = 'gemini-flash-latest') {
         $api_key = !empty($custom_key) ? trim($custom_key) : $this->get_api_key();
         if (empty($api_key)) {
             return ['success' => false, 'error' => 'API Key belum diisi.'];
         }
 
-        $model = !empty($custom_model) ? trim($custom_model) : 'gemini-1.5-flash';
+        $model = !empty($custom_model) ? trim($custom_model) : 'gemini-flash-latest';
         $payload = [
             "contents" => [
                 [
@@ -333,11 +340,15 @@ class Gemini_ocr {
         }
 
         $ocr_provider = 'gemini_flash';
-        $gemini_model = 'gemini-2.5-flash';
+        $gemini_model = 'gemini-flash-latest';
 
         if (isset($this->CI->app_model) && method_exists($this->CI->app_model, 'get_setting')) {
             $ocr_provider = $this->CI->app_model->get_setting('ocr_provider', 'gemini_flash');
-            $gemini_model = $this->CI->app_model->get_setting('gemini_model', 'gemini-1.5-flash');
+            $gemini_model = $this->CI->app_model->get_setting('gemini_model', 'gemini-flash-latest');
+        }
+
+        if (empty($gemini_model) || in_array($gemini_model, ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-2.5-flash'])) {
+            $gemini_model = 'gemini-flash-latest';
         }
 
         // If provider is Google Cloud Vision API
@@ -384,7 +395,7 @@ class Gemini_ocr {
 
         if ($http_code !== 200 || empty($response)) {
             // Fallback to Gemini if Vision API encounters error
-            return $this->process_via_gemini($base64_image, $nama_order, $api_key, 'gemini-1.5-flash');
+            return $this->process_via_gemini($base64_image, $nama_order, $api_key, 'gemini-flash-latest');
         }
 
         $res_json = json_decode($response, true);
@@ -443,7 +454,7 @@ Aturannya:
             ]
         ];
 
-        $res = $this->call_gemini_api($payload, $api_key, 'gemini-1.5-flash');
+        $res = $this->call_gemini_api($payload, $api_key, 'gemini-flash-latest');
 
         if (!$res['success']) {
             return ['success' => false, 'error' => 'Gagal menstrukturkan teks dengan Gemini API. HTTP Code: ' . $res['http_code'], 'debug' => $res['response']];
@@ -526,7 +537,7 @@ Aturannya:
     /**
      * Process directly via Gemini Multimodal Vision API
      */
-    protected function process_via_gemini($base64_image, $nama_order, $api_key, $primary_model = 'gemini-1.5-flash', $mime_type = 'image/jpeg') {
+    protected function process_via_gemini($base64_image, $nama_order, $api_key, $primary_model = 'gemini-flash-latest', $mime_type = 'image/jpeg') {
         $prompt = "Tolong analisis gambar nota ini dan ekstrak SEMUA transaksi/barang ke dalam format array JSON persis seperti contoh ini:
 [
   {
