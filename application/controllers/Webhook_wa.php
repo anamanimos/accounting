@@ -6,6 +6,7 @@ class Webhook_wa extends CI_Controller {
     {
         parent::__construct();
         $this->load->database();
+        $this->db->db_debug = FALSE;
         $this->load->model('app_model');
         // Ensure Env class is loaded
         if (!class_exists('Env') && file_exists(FCPATH . 'application/config/env.php')) {
@@ -104,6 +105,13 @@ class Webhook_wa extends CI_Controller {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
 
         $log_file = FCPATH . 'wa.txt';
+        register_shutdown_function(function() use ($log_file) {
+            $err = error_get_last();
+            if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR])) {
+                @file_put_contents($log_file, "[FATAL PHP SHUTDOWN] " . json_encode($err) . "\n", FILE_APPEND);
+            }
+        });
+
         $time = date('Y-m-d H:i:s');
         
         $log_content = "=== WEBHOOK RECEIVED AT " . $time . " ===\n";
@@ -184,57 +192,68 @@ class Webhook_wa extends CI_Controller {
         $sender_jid = $payload['from'] ?? $payload['participant'] ?? $payload['key']['participant'] ?? $chat_id;
         $replied_to_id = $payload['replied_to_id'] ?? $payload['contextInfo']['stanzaId'] ?? null;
 
-        // Cek State Machine (YA / BATAL)
+        // Cek State Machine (YA / BATAL / RESET)
         $upper_body = strtoupper(trim($body));
-        if (in_array($upper_body, ['YA', 'BATAL'])) {
-            @file_put_contents($log_file, "[DEBUG] Detected YA/BATAL. upper_body: $upper_body, replied_to_id: " . ($replied_to_id ?: 'null') . "\n", FILE_APPEND);
+        if (in_array($upper_body, ['YA', 'BATAL', 'RESET', '!RESET', '/RESET', 'BATALKAN'])) {
+            @file_put_contents($log_file, "[DEBUG] Detected Command: $upper_body, replied_to_id: " . ($replied_to_id ?: 'null') . "\n", FILE_APPEND);
             
-            $draft = null;
-            if ($replied_to_id) {
-                $draft = $this->db->get_where('wa_draft_jurnal', ['message_id' => $replied_to_id, 'status' => 'pending'])->row();
-            }
-            // Jika tidak di-reply ATAU ID tidak ditemukan di DB (karena GOWA tidak return ID), ambil draf terakhir
-            if (!$draft) {
-                @file_put_contents($log_file, "[DEBUG] Draft not found by replied_to_id, falling back to DESC\n", FILE_APPEND);
-                $draft = $this->db->order_by('id', 'DESC')->get_where('wa_draft_jurnal', ['status' => 'pending'])->row();
+            if (in_array($upper_body, ['BATAL', 'RESET', '!RESET', '/RESET', 'BATALKAN'])) {
+                // Batalkan antrian draft jurnal
+                $this->db->where('status', 'pending')->update('wa_draft_jurnal', ['status' => 'rejected']);
+                $draft_cancelled = $this->db->affected_rows();
+
+                // Bersihkan semua pending image agar tidak ada proses tertumpuk
+                $this->db->empty_table('wa_pending_image');
+
+                $this->_send_message($chat_id, "✅ Semua antrian foto dan draf jurnal telah dibatalkan / direset. Anda dapat mengirimkan nota baru sekarang.", $message_id);
+                return $this->_response(['status' => 'reset_success', 'drafts_cancelled' => $draft_cancelled]);
             }
 
-            if ($draft) {
-                @file_put_contents($log_file, "[DEBUG] Found pending draft ID: {$draft->id}. Processing...\n", FILE_APPEND);
-                
-                if ($upper_body === 'BATAL') {
-                    $this->db->update('wa_draft_jurnal', ['status' => 'rejected'], ['id' => $draft->id]);
-                    $this->_send_message($chat_id, "Draf jurnal telah dibatalkan.", $message_id);
-                } else {
+            if ($upper_body === 'YA') {
+                $draft = null;
+                if ($replied_to_id) {
+                    $draft = $this->db->get_where('wa_draft_jurnal', ['message_id' => $replied_to_id, 'status' => 'pending'])->row();
+                }
+                // Jika tidak di-reply ATAU ID tidak ditemukan di DB, ambil draf terakhir
+                if (!$draft) {
+                    @file_put_contents($log_file, "[DEBUG] Draft not found by replied_to_id, falling back to DESC\n", FILE_APPEND);
+                    $draft = $this->db->order_by('id', 'DESC')->get_where('wa_draft_jurnal', ['status' => 'pending'])->row();
+                }
+
+                if ($draft) {
+                    @file_put_contents($log_file, "[DEBUG] Found pending draft ID: {$draft->id}. Processing...\n", FILE_APPEND);
+                    
                     // YA: Simpan ke database
                     $jurnal_data = json_decode($draft->payload_jurnal, true);
                     @file_put_contents($log_file, "[DEBUG] Starting DB transaction with payload: " . json_encode($jurnal_data) . "\n", FILE_APPEND);
                     
-                    // Matikan db_debug agar script tidak mati tiba-tiba jika ada error SQL
-                    $this->db->db_debug = FALSE;
+                    $this->db->reconnect();
                     $this->db->trans_start();
                     
-                    foreach ($jurnal_data as $row) {
-                        if (!$this->db->insert('jurnal_umum', $row)) {
-                            @file_put_contents($log_file, "[DEBUG DB ERROR] " . json_encode($this->db->error()) . "\n", FILE_APPEND);
+                    if (is_array($jurnal_data)) {
+                        foreach ($jurnal_data as $row) {
+                            if (!$this->db->insert('jurnal_umum', $row)) {
+                                @file_put_contents($log_file, "[DEBUG DB ERROR] " . json_encode($this->db->error()) . "\n", FILE_APPEND);
+                            }
                         }
                     }
                     $this->db->trans_complete();
                     $trans_status = $this->db->trans_status();
-                    $this->db->db_debug = TRUE; // Kembalikan ke normal
 
                     @file_put_contents($log_file, "[DEBUG] DB transaction complete. Status: " . ($trans_status === FALSE ? 'FAILED' : 'SUCCESS') . "\n", FILE_APPEND);
 
                     if ($trans_status === FALSE) {
-                        $this->_send_message($chat_id, "Gagal menyimpan jurnal ke database. Mohon cek log server.", $message_id);
+                        $this->_send_message($chat_id, "⚠️ Gagal menyimpan jurnal ke database. Mohon cek log server.", $message_id);
                     } else {
                         $this->db->update('wa_draft_jurnal', ['status' => 'approved'], ['id' => $draft->id]);
-                        $this->_send_message($chat_id, "✅ Jurnal berhasil disimpan!", $message_id);
+                        $this->_send_message($chat_id, "✅ Jurnal berhasil disimpan ke pembukuan!", $message_id);
                     }
+                    return $this->_response(['status' => 'state_processed']);
+                } else {
+                    @file_put_contents($log_file, "[DEBUG] NO PENDING DRAFT FOUND AT ALL!\n", FILE_APPEND);
+                    $this->_send_message($chat_id, "⚠️ Tidak ada draf jurnal yang sedang menunggu konfirmasi 'YA'. Silakan kirimkan foto nota atau format transaksi terlebih dahulu.", $message_id);
+                    return $this->_response(['status' => 'no_pending_draft']);
                 }
-                return $this->_response(['status' => 'state_processed']);
-            } else {
-                @file_put_contents($log_file, "[DEBUG] NO PENDING DRAFT FOUND AT ALL!\n", FILE_APPEND);
             }
         }
 
@@ -246,7 +265,7 @@ class Webhook_wa extends CI_Controller {
         if (!empty($image_path)) {
             $nama_order = $body;
             if (empty($nama_order)) {
-                $sent_msg = $this->_send_message($chat_id, "Silakan balas pesan ini dengan teks keterangan (Nama Order) untuk gambar tersebut:\n_(Opsional sertakan tanggal jika berbeda dari nota, contoh: Size Sevencols 14/07/2026)_", $message_id);
+                $sent_msg = $this->_send_message($chat_id, "Silakan balas pesan ini dengan teks keterangan (Nama Order) untuk gambar tersebut:\n_(Atau Anda dapat mengirim foto disertai caption langsung. Balas *BATAL* untuk membatalkan antrian)_", $message_id);
                 
                 $bot_msg_id = 'unknown_' . time() . '_' . rand(100, 999);
                 if ($sent_msg) {
@@ -260,6 +279,10 @@ class Webhook_wa extends CI_Controller {
                         $bot_msg_id = $sent_msg['message_id'];
                     }
                 }
+
+                // Bersihkan antrian pending gambar yang sudah kadaluarsa (> 15 menit)
+                $fifteen_mins_ago = date('Y-m-d H:i:s', time() - 900);
+                $this->db->where('created_at <', $fifteen_mins_ago)->delete('wa_pending_image');
 
                 $this->db->insert('wa_pending_image', [
                     'message_id' => $bot_msg_id,
@@ -282,24 +305,31 @@ class Webhook_wa extends CI_Controller {
                 $prompt = $body;
             } else {
                 // 2. Jika bukan teks transaksi, cek apakah membalas permintaan Nama Order untuk gambar pending
+                $fifteen_mins_ago = date('Y-m-d H:i:s', time() - 900);
                 $pending = null;
                 if ($replied_to_id) {
                     $pending = $this->db->get_where('wa_pending_image', ['message_id' => $replied_to_id])->row();
                 }
                 
                 if (!$pending && !empty($sender_jid)) {
-                    // Cek latest pending request by sender_jid
-                    $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['sender_jid' => $sender_jid])->row();
+                    // Ambil pending request tertua (FIFO / ASC) dari pengirim ini dalam 15 menit terakhir
+                    $pending = $this->db->where('created_at >=', $fifteen_mins_ago)
+                        ->where('sender_jid', $sender_jid)
+                        ->order_by('id', 'ASC')
+                        ->get('wa_pending_image')
+                        ->row();
                 }
 
                 if (!$pending) {
-                    // Fallback: Cek latest pending request di grup dalam 15 menit terakhir
-                    $fifteen_mins_ago = date('Y-m-d H:i:s', time() - 900);
-                    $pending = $this->db->order_by('id', 'DESC')->get_where('wa_pending_image', ['created_at >=' => $fifteen_mins_ago])->row();
+                    // Fallback: Ambil pending request tertua (FIFO / ASC) di grup dalam 15 menit terakhir
+                    $pending = $this->db->where('created_at >=', $fifteen_mins_ago)
+                        ->order_by('id', 'ASC')
+                        ->get('wa_pending_image')
+                        ->row();
                 }
 
                 $override_date = null;
-                if ($pending && !empty($body) && !in_array(strtoupper($body), ['YA', 'BATAL'])) {
+                if ($pending && !empty($body) && !in_array(strtoupper($body), ['YA', 'BATAL', 'RESET', '!RESET', '/RESET', 'BATALKAN'])) {
                     $this->db->delete('wa_pending_image', ['id' => $pending->id]);
                     
                     $is_processing_image = true;
@@ -307,7 +337,7 @@ class Webhook_wa extends CI_Controller {
                     
                     // Extract optional date in reply text (e.g. "Size Sevencols 14/07/2026")
                     $custom_date = $this->_extract_date($body);
-                    $clean_nama_order = preg_replace('/(?:tgl|tanggal)?\s*[:\.]?\s*\d{1,4}[\/\.-]\d{1,2}[\/\.-]\d{1,4}/i', '', $body);
+                    $clean_nama_order = preg_replace('/(?:tgl|tanggal)?\s*[:\.]?\s*\d{1,4}\s*[\/\.-]\s*\d{1,2}\s*[\/\.-]\s*\d{1,4}/i', '', $body);
                     $clean_nama_order = trim($clean_nama_order, " \t\n\r\0\x0B*_~\\");
                     
                     $nama_order_to_process = !empty($clean_nama_order) ? $clean_nama_order : $body;
@@ -349,8 +379,15 @@ class Webhook_wa extends CI_Controller {
             }
         }
 
+        if ($is_processing_image) {
+            $this->db->reconnect();
+        }
+
         try {
+            @file_put_contents($log_file, "[DEBUG STEP 1] Starting _parse_prompt\n", FILE_APPEND);
             $transactions = $this->_parse_prompt($prompt);
+            @file_put_contents($log_file, "[DEBUG STEP 2] Finished _parse_prompt, found: " . count($transactions) . " items\n", FILE_APPEND);
+
             if (empty($transactions)) {
                 @file_put_contents($log_file, "[DEBUG] Ignoring message because parsed transactions are empty. Prompt: $prompt\n", FILE_APPEND);
                 if ($is_processing_image || !empty($image_path)) {
@@ -367,8 +404,10 @@ class Webhook_wa extends CI_Controller {
                 }
             }
 
+            @file_put_contents($log_file, "[DEBUG STEP 3] Starting _build_jurnal_array\n", FILE_APPEND);
             // Ubah jadi array jurnal yang siap insert
             $jurnal_rows = $this->_build_jurnal_array($transactions);
+            @file_put_contents($log_file, "[DEBUG STEP 4] Built jurnal rows: " . count($jurnal_rows) . "\n", FILE_APPEND);
 
             // Buat pesan balasan preview
             $source_title = $is_processing_image ? "(Hasil Scan Foto Nota)" : "(Hasil Teks Chat Order)";
@@ -391,6 +430,7 @@ class Webhook_wa extends CI_Controller {
             $preview_msg .= "Balas pesan ini dengan kata *YA* untuk menyimpan, atau *BATAL*.";
 
             // Kirim draft ke grup
+            @file_put_contents($log_file, "[DEBUG STEP 5] Calling _send_message for draft preview...\n", FILE_APPEND);
             $sent_msg = $this->_send_message($chat_id, $preview_msg, $message_id);
             
             $bot_msg_id = 'unknown_' . time() . '_' . rand(100, 999);
@@ -407,13 +447,14 @@ class Webhook_wa extends CI_Controller {
             }
             
             // Selalu simpan ke wa_draft_jurnal agar fitur YA/BATAL berfungsi dengan melihat draf terakhir
-            $this->db->insert('wa_draft_jurnal', [
+            $insert_ok = $this->db->insert('wa_draft_jurnal', [
                 'message_id' => $bot_msg_id,
                 'sender_jid' => $sender_jid,
                 'payload_jurnal' => json_encode($jurnal_rows),
                 'status' => 'pending',
                 'created_at' => date('Y-m-d H:i:s')
             ]);
+            @file_put_contents($log_file, "[DEBUG STEP 6] Saved draft to DB. Success: " . ($insert_ok ? 'YES' : 'NO') . "\n", FILE_APPEND);
 
             return $this->_response(['status' => 'draft_created']);
         } catch (Throwable $e) {
@@ -701,6 +742,20 @@ class Webhook_wa extends CI_Controller {
 
         $transactions = [];
 
+        // Ambil harga_jual master_harga sekali saja di awal
+        $harga_per_cm = 500;
+        try {
+            $mh_q = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1");
+            if ($mh_q && is_object($mh_q) && method_exists($mh_q, 'row')) {
+                $mh_row = $mh_q->row();
+                if (!empty($mh_row->harga_jual)) {
+                    $harga_per_cm = (int)$mh_row->harga_jual;
+                }
+            }
+        } catch (Throwable $e) {
+            $harga_per_cm = 500;
+        }
+
         // Direct JSON Array Support if Gemini returned JSON directly
         $clean_json = '';
         if (preg_match('/\[\s*\{[\s\S]*\}\s*\]/', $prompt, $matches)) {
@@ -738,8 +793,6 @@ class Webhook_wa extends CI_Controller {
                     }
 
                     $harga_jual = 0;
-                    $mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
-                    $harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
                     preg_match_all('/\d+/', $ukuran, $matches_uk);
                     $panjang = (!empty($matches_uk[0])) ? (int) end($matches_uk[0]) : 0;
                     $harga_jual = $panjang * $harga_per_cm;
@@ -806,12 +859,8 @@ class Webhook_wa extends CI_Controller {
                     $modal = (int) $modal_str;
                     
                     if ($harga_jual === 0) {
-                        $mh = $this->db->query("SELECT harga_jual FROM master_harga LIMIT 1")->row();
-                        $harga_per_cm = $mh ? (int)$mh->harga_jual : 0;
-                        
                         preg_match_all('/\d+/', $ukuran, $matches_uk);
                         $panjang = (!empty($matches_uk[0])) ? (int) end($matches_uk[0]) : 0;
-                        
                         $harga_jual = $panjang * $harga_per_cm;
                         
                         if ($harga_jual === 0 && $modal > 0) {
@@ -843,10 +892,24 @@ class Webhook_wa extends CI_Controller {
     {
         $jurnal_rows = [];
         
-        $max_jurnal_row = $this->db->query("SELECT MAX(CAST(no_jurnal AS UNSIGNED)) as max_val FROM jurnal_umum")->row();
-        $max_jurnal = $max_jurnal_row ? $max_jurnal_row->max_val : null;
-        $max_bukti_row = $this->db->query("SELECT MAX(CAST(no_bukti AS UNSIGNED)) as max_val FROM jurnal_umum")->row();
-        $max_bukti = $max_bukti_row ? $max_bukti_row->max_val : null;
+        $max_jurnal = null;
+        $max_bukti = null;
+        try {
+            $max_jurnal_row = $this->db->query("SELECT MAX(CAST(no_jurnal AS UNSIGNED)) as max_val FROM jurnal_umum");
+            if ($max_jurnal_row && is_object($max_jurnal_row) && method_exists($max_jurnal_row, 'row')) {
+                $j_row = $max_jurnal_row->row();
+                $max_jurnal = $j_row ? $j_row->max_val : null;
+            }
+
+            $max_bukti_row = $this->db->query("SELECT MAX(CAST(no_bukti AS UNSIGNED)) as max_val FROM jurnal_umum");
+            if ($max_bukti_row && is_object($max_bukti_row) && method_exists($max_bukti_row, 'row')) {
+                $b_row = $max_bukti_row->row();
+                $max_bukti = $b_row ? $b_row->max_val : null;
+            }
+        } catch (Throwable $e) {
+            $max_jurnal = null;
+            $max_bukti = null;
+        }
 
         $current_jurnal = $max_jurnal ? (int)$max_jurnal + 1 : (int)(date('y') . date('m') . '00001');
         $current_bukti = $max_bukti ? (int)$max_bukti + 1 : (int)(date('y') . date('m') . '001');
@@ -944,6 +1007,43 @@ class Webhook_wa extends CI_Controller {
             'status' => 'ok',
             'target_group' => $target_group,
             'gateway_response' => $res
+        ], JSON_PRETTY_PRINT);
+    }
+
+    public function status()
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        $this->db->reconnect();
+        $this->db->db_debug = FALSE;
+
+        $pending_images = $this->db->order_by('id', 'DESC')->limit(10)->get('wa_pending_image')->result_array();
+        $pending_drafts = $this->db->order_by('id', 'DESC')->limit(10)->get('wa_draft_jurnal')->result_array();
+        $recent_jurnals = $this->db->order_by('no_jurnal', 'DESC')->limit(5)->get('jurnal_umum')->result_array();
+        
+        echo json_encode([
+            'server_time' => date('Y-m-d H:i:s'),
+            'pending_images_count' => count($pending_images),
+            'pending_images' => $pending_images,
+            'pending_drafts_count' => count($pending_drafts),
+            'pending_drafts' => $pending_drafts,
+            'recent_jurnals' => $recent_jurnals
+        ], JSON_PRETTY_PRINT);
+    }
+
+    public function reset_queue()
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        $this->db->reconnect();
+        $this->db->db_debug = FALSE;
+
+        $this->db->empty_table('wa_pending_image');
+        $this->db->where('status', 'pending')->update('wa_draft_jurnal', ['status' => 'rejected']);
+        $drafts_cleared = $this->db->affected_rows();
+
+        echo json_encode([
+            'status' => 'ok',
+            'message' => 'Antrian wa_pending_image dan wa_draft_jurnal berhasil dibersihkan.',
+            'drafts_cleared' => $drafts_cleared
         ], JSON_PRETTY_PRINT);
     }
 }
